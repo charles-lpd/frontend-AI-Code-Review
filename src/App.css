@@ -1,0 +1,125 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+}
+
+.nav {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 1rem;
+  background: rgba(2, 11, 24, 0.95);
+  border-bottom: 1px solid rgba(0, 180, 255, 0.15);
+  z-index: 10;
+}
+
+.nav__left,
+.nav__right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav__brand {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #00d4ff;
+  letter-spacing: 0.06em;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-info-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.user-info-link:hover {
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+.user-name {
+  font-size: 0.85rem;
+  color: #b8e4ff;
+}
+
+.login-btn,
+.logout-btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.8125rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.login-btn {
+  background: #24292e;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.login-btn:hover {
+  background: #2c3137;
+}
+
+.logout-btn {
+  background: transparent;
+  color: rgba(255, 100, 100, 0.8);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+}
+
+.logout-btn:hover {
+  background: rgba(255, 100, 100, 0.1);
+  color: rgba(255, 100, 100, 1);
+}
+
+.nav__tab {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8125rem;
+  color: rgba(184, 228, 255, 0.65);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  text-decoration: none;
+  transition:
+    color 0.2s,
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.nav__tab:hover {
+  color: #b8e4ff;
+  border-color: rgba(0, 180, 255, 0.25);
+}
+
+.nav__tab--active {
+  color: #00d4ff;
+  border-color: rgba(0, 212, 255, 0.45);
+  background: rgba(0, 100, 180, 0.2);
+}
+
+.app__main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
