@@ -10,7 +10,7 @@ const validateStatus = function (status: number): boolean {
   return status >= 200 && status < 300; // default
 };
 
-export const baseUrl = 'http://localhost:3000/api';
+export const baseUrl = 'https://www.adongdong.xyz/api';
 
 /** 专门用于处理 AI 聊天的流式请求 */
 export const sendChatStream = async (
