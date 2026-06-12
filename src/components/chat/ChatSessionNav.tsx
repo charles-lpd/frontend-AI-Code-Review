@@ -2,7 +2,7 @@
  * 会话导航：通过 /chat/:sessionId 切换会话
  */
 import type { MouseEvent } from 'react'
-import { NavLink, useNavigate, useParams } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useChatStore } from '../../store/useChatStore'
 import './ChatSessionNav.css'
 
@@ -13,7 +13,7 @@ interface ChatSessionNavProps {
 export default function ChatSessionNav({
   sendingSessionId = null,
 }: ChatSessionNavProps) {
-  const { sessionId: routeSessionId } = useParams()
+  // const { sessionId: routeSessionId } = useParams()
   const navigate = useNavigate()
   const sessions = useChatStore((s) => s.sessions)
   const createSession = useChatStore((s) => s.createSession)

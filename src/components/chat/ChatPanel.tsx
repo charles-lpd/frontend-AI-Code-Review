@@ -16,7 +16,7 @@ import { Square, Send, Trash2, Bot } from 'lucide-react';
 import { useChatSend } from '../../hooks/useChatSend';
 import {
   chatActions,
-  useActiveSession,
+  // useActiveSession,
   useChatStore,
 } from '../../store/useChatStore';
 import MessageItem from './MessageItem/MessageItem';

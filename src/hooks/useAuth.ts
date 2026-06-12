@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+// import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { baseUrl } from '../api/index';
 
 export const useAuth = () => {
   const { setToken, fetchUserInfo, isAuthenticated, logout, user } =
     useAuthStore();
-  const location = useLocation();
-  const navigate = useNavigate();
+  // const location = useLocation();
+  // const navigate = useNavigate();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

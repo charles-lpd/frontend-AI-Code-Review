@@ -12,7 +12,7 @@ export function useChatRouteSync() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const {
-    sessions,
+    // sessions,
     fetchSessions,
     switchSession,
     createSession,

@@ -1,6 +1,4 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
-import isObject from 'lodash/isObject';
-import isString from 'lodash/isString';
 import { useAuthStore } from '../store/useAuthStore';
 
 // `validateStatus` defines whether to resolve or reject the promise for a given
