@@ -28,43 +28,16 @@ export default function MessageItem({ role, content }: MessageItemProps) {
     }
   };
 
-  // 预处理内容，修复被错误分割的 markdown 引用块
+  // 预处理内容，清理格式问题
   const processContent = (text: string) => {
     if (!text) return text;
     
     let processed = text;
     
-    // 1. 移除每个行首可能有的多余 "> " 前缀（来自旧版本的输出）
-    // 处理类似 "\n> 内容" 变成 "\n内容"，但保留真正的 markdown 引用块
-    processed = processed.replace(/^>\s*/gm, (match, offset, original) => {
-      // 如果是真正的引用块（前面有空行或开头），保留
-      if (offset === 0 || original[offset - 1] === '\n') {
-        // 检查是否是真正的引用块内容，而不是被错误添加的前缀
-        const before = original.slice(0, offset);
-        // 如果前面已经有 markdown 结构（比如标题、列表），就保留
-        if (before.includes('#') || before.includes('*') || before.includes('-')) {
-          return match;
-        }
-        // 否则，我们检查一下后面的内容
-        const after = original.slice(offset + match.length);
-        // 如果后面是正常的内容，就去掉这个多余的前缀
-        if (after.trim().length > 0 && !after.trim().startsWith('>')) {
-          return '';
-        }
-      }
-      return match;
-    });
-    
-    // 2. 修复被错误分割的引用块
-    processed = processed.replace(/\n>\s*([^\n]*)/g, '\n> $1');
-    
-    // 3. 合并多余的连续引用标记
-    processed = processed.replace(/(\n>\s*)+/g, '\n> ');
-    
-    // 4. 清理多余空行
+    // 清理多余的空行
     processed = processed.replace(/\n{3,}/g, '\n\n');
     
-    // 5. 清理开头的多余空行
+    // 清理开头的多余空行
     processed = processed.replace(/^\n+/, '');
     
     return processed;
