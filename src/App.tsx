@@ -11,7 +11,7 @@ export default function App() {
     <div className="app">
       <nav className="nav">
         <div className="nav__left">
-          <span className="nav__brand">EverPay AI Review</span>
+          <span className="nav__brand">EverPay AI Review T</span>
           <NavLink
             to="/"
             end
