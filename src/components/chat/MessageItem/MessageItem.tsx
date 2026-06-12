@@ -28,6 +28,27 @@ export default function MessageItem({ role, content }: MessageItemProps) {
     }
   };
 
+  // 预处理内容，修复被错误分割的 markdown 引用块
+  const processContent = (text: string) => {
+    if (!text) return text;
+    
+    let processed = text;
+    
+    // 修复：将连续的 \n> 开头的片段正确处理，避免每个 > 都变成新引用块
+    // 这个正则将 \n> 后面跟着空格或没有的内容，统一格式化为 > 
+    processed = processed.replace(/\n>\s*([^\n]*)/g, '\n> $1');
+    
+    // 修复：如果有多个连续的 \n> ，合并它们
+    processed = processed.replace(/(\n>\s*)+/g, '\n> ');
+    
+    // 清理多余的空行
+    processed = processed.replace(/\n{3,}/g, '\n\n');
+    
+    return processed;
+  };
+
+  const processedContent = processContent(content);
+
   return (
     <div className={`message-item message-item--${role}`}>
       <div className="message-item__avatar">{getIcon()}</div>
@@ -57,7 +78,7 @@ export default function MessageItem({ role, content }: MessageItemProps) {
               },
             }}
           >
-            {content}
+            {processedContent}
           </ReactMarkdown>
         )}
       </div>
