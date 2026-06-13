@@ -94,6 +94,24 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
     }
   }, [messages.length, session?.isLoadingMore]);
 
+  // 监听流式输出内容变化，自动滚动到底部
+  useEffect(() => {
+    if (!streamingMsg) return;
+
+    const el = listRef.current;
+    if (!el) return;
+
+    // 检查用户是否已经滚动离开了底部（给 100px 的缓冲）
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+
+    if (isNearBottom) {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: 'auto',
+      });
+    }
+  }, [streamingMsg]);
+
   // 当切换会话时，重置初始加载标记
   useEffect(() => {
     isInitialLoadRef.current = true;
@@ -182,15 +200,19 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
 
       <div className="chat__messages" ref={listRef} onScroll={handleScroll}>
         {session?.isLoadingMore && (
-          <div className="chat__history-loading">
-            <div className="dot-pulse"></div>
-            <span>加载历史记录...</span>
+          <div className="message-container">
+            <div className="chat__history-loading">
+              <div className="dot-pulse"></div>
+              <span>加载历史记录...</span>
+            </div>
           </div>
         )}
         {session?.summary && (
-          <div className="chat__summary">
-            <div className="chat__summary-title">会话摘要</div>
-            <div className="chat__summary-content">{session.summary}</div>
+          <div className="message-container">
+            <div className="chat__summary">
+              <div className="chat__summary-title">会话摘要</div>
+              <div className="chat__summary-content">{session.summary}</div>
+            </div>
           </div>
         )}
         {messagesHistory.length === 0 && !isLoading && (
@@ -203,11 +225,15 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
           </div>
         )}
         {messagesHistory.map((m) => (
-          <MessageItem key={m.id} role={m.role} content={m.content} />
+          <div className="message-container" key={m.id}>
+            <MessageItem role={m.role} content={m.content} />
+          </div>
         ))}
         {isLoading && !streamingMsg && (
-          <div className="chat__loading-indicator">
-            <div className="dot-pulse"></div>
+          <div className="message-container">
+            <div className="chat__loading-indicator">
+              <div className="dot-pulse"></div>
+            </div>
           </div>
         )}
       </div>

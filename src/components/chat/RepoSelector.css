@@ -1,7 +1,6 @@
 .repo-selector {
   position: relative;
   width: 100%;
-  max-width: 850px;
   margin-bottom: 12px;
 }
 
@@ -10,18 +9,18 @@
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: rgba(0, 212, 255, 0.1);
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  color: #00d4ff;
+  color: #1a1a1a;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .repo-selector__trigger:hover {
-  background: rgba(0, 212, 255, 0.2);
-  border-color: #00d4ff;
+  background: #e5e7eb;
+  border-color: #d1d5db;
 }
 
 .repo-selector__dropdown {
@@ -30,11 +29,11 @@
   left: 0;
   width: 100%;
   max-height: 400px;
-  background: #0d1117;
-  border: 1px solid rgba(0, 180, 255, 0.2);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   margin-bottom: 8px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
   z-index: 100;
@@ -43,7 +42,7 @@
 
 .repo-selector__header {
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid #e5e7eb;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -52,13 +51,13 @@
 .repo-selector__header h3 {
   margin: 0;
   font-size: 14px;
-  color: #b8e4ff;
+  color: #1a1a1a;
 }
 
 .repo-selector__header button {
   background: transparent;
   border: none;
-  color: #00d4ff;
+  color: #6b7280;
   font-size: 12px;
   cursor: pointer;
 }
@@ -80,7 +79,7 @@
 }
 
 .repo-item:hover {
-  background: rgba(0, 212, 255, 0.1);
+  background: #f3f4f6;
 }
 
 .repo-item__info {
@@ -91,32 +90,33 @@
 
 .repo-item__name {
   font-size: 13px;
-  color: #e6edf3;
+  color: #1a1a1a;
 }
 
 .repo-item__badge {
   font-size: 10px;
   padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.5);
+  color: #6b7280;
 }
 
 .repo-item a {
-  color: rgba(0, 212, 255, 0.6);
+  color: #6b7280;
   display: flex;
   align-items: center;
 }
 
 .repo-item a:hover {
-  color: #00d4ff;
+  color: #1a1a1a;
 }
 
-.repo-selector__loading, .repo-selector__empty {
+.repo-selector__loading,
+.repo-selector__empty {
   padding: 32px;
   text-align: center;
-  color: rgba(184, 228, 255, 0.5);
+  color: #6b7280;
   font-size: 13px;
 }
 
@@ -126,16 +126,15 @@
   gap: 8px;
   padding: 8px 16px;
   background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 8px;
-  color: #f87171;
+  color: #dc2626;
   font-size: 13px;
   margin-bottom: 12px;
-  max-width: 850px;
 }
 
 .install-link {
-  color: #f87171;
+  color: #dc2626;
   text-decoration: underline;
   font-weight: 600;
 }
@@ -145,6 +144,10 @@
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }

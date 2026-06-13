@@ -31,15 +31,15 @@ export default function MessageItem({ role, content }: MessageItemProps) {
   // 预处理内容，清理格式问题
   const processContent = (text: string) => {
     if (!text) return text;
-    
+
     let processed = text;
-    
+
     // 清理多余的空行
     processed = processed.replace(/\n{3,}/g, '\n\n');
-    
+
     // 清理开头的多余空行
     processed = processed.replace(/^\n+/, '');
-    
+
     return processed;
   };
 
@@ -107,7 +107,16 @@ function CodeBlock({ language, value }: { language: string; value: string }) {
       <SyntaxHighlighter
         language={language}
         style={oneDark}
-        customStyle={{ margin: 0, borderRadius: '0 0 8px 8px' }}
+        customStyle={{
+          margin: 0,
+          borderRadius: '0 0 8px 8px',
+          maxWidth: '100%',
+          overflowX: 'auto',
+          width: '100%',
+        }}
+        showLineNumbers={false}
+        wrapLines={true}
+        wrapLongLines={true}
       >
         {value}
       </SyntaxHighlighter>

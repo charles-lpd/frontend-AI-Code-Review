@@ -12,11 +12,33 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  background: #020b18;
-  color: #e8f4ff;
+  font-family:
+    "Söhne", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Ubuntu", "Cantarell", "Noto Sans",
+    sans-serif;
+  background: #ffffff;
+  color: #1a1a1a;
+  line-height: 1.5;
 }
 
 button {
   font-family: inherit;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c7c7c7;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
