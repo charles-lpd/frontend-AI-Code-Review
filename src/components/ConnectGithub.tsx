@@ -28,7 +28,7 @@ export default function ConnectGithub() {
           </div>
         </div>
         <button onClick={login} className="connect-github__button">
-          <GitBranch size={20} className="connect-github__icon" />
+          <GitBranch size={20} />
           <span>连接 GitHub</span>
           <ArrowRight size={20} />
         </button>
