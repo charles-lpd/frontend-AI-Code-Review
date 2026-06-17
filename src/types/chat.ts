@@ -14,6 +14,46 @@ export interface ToolCall {
   };
 }
 
+export interface ReviewDimensionSection {
+  name: string;
+  content: string;
+  loading?: boolean;
+  ok?: boolean;
+  duration?: number;
+}
+
+export interface ReviewStreamMetadata {
+  kind: 'code_review';
+  statusText: string;
+  dimensions: ReviewDimensionSection[];
+  summaryText: string;
+  finalText: string;
+}
+
+export interface ReviewStreamChunk {
+  text: string;
+  type:
+    | 'status'
+    | 'dimension_start'
+    | 'dimension_header'
+    | 'dimension_chunk'
+    | 'dimension_done'
+    | 'summary_header'
+    | 'summary_chunk'
+    | 'summary_done'
+    | 'comment_status'
+    | 'final';
+  phase: 'fetch' | 'review' | 'summary' | 'comment' | 'final';
+  dimension?: string;
+  duration?: number;
+  ok?: boolean;
+}
+
+export interface StreamingAssistantState {
+  content: string;
+  metadata?: ChatMessage['metadata'];
+}
+
 /** 单条聊天记录 */
 export interface ChatMessage {
   id: string;
@@ -29,6 +69,7 @@ export interface ChatMessage {
   metadata?: {
     citations?: string[];
     thought?: string; // 思维链
+    reviewStream?: ReviewStreamMetadata;
     [key: string]: any;
   };
   createdAt?: number;

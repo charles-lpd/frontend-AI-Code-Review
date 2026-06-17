@@ -1,6 +1,113 @@
 import { chatActions } from '../store/useChatStore';
 import { sendChatStream } from '../api';
-import type { ChatMessage } from '../types/chat';
+import type {
+  ChatMessage,
+  ReviewStreamChunk,
+  ReviewStreamMetadata,
+  StreamingAssistantState,
+} from '../types/chat';
+
+function createEmptyReviewStreamMetadata(): ReviewStreamMetadata {
+  return {
+    kind: 'code_review',
+    statusText: '',
+    dimensions: [],
+    summaryText: '',
+    finalText: '',
+  };
+}
+
+function appendDimensionChunk(
+  dimensions: ReviewStreamMetadata['dimensions'],
+  name: string,
+  chunk: string,
+) {
+  const existing = dimensions.find((item) => item.name === name);
+  if (existing) {
+    existing.content += chunk;
+    return;
+  }
+  dimensions.push({ name, content: chunk, loading: true });
+}
+
+function ensureDimensionStarted(
+  dimensions: ReviewStreamMetadata['dimensions'],
+  name: string,
+) {
+  const existing = dimensions.find((item) => item.name === name);
+  if (existing) {
+    existing.loading = true;
+    return;
+  }
+  dimensions.push({ name, content: '', loading: true });
+}
+
+function updateDimensionDone(
+  dimensions: ReviewStreamMetadata['dimensions'],
+  name: string,
+  ok?: boolean,
+  duration?: number,
+) {
+  const existing = dimensions.find((item) => item.name === name);
+  if (existing) {
+    existing.loading = false;
+    existing.ok = ok;
+    existing.duration = duration;
+    return;
+  }
+  dimensions.push({ name, content: '', loading: false, ok, duration });
+}
+
+function applyReviewStreamChunk(
+  current: ReviewStreamMetadata | undefined,
+  chunk: ReviewStreamChunk,
+): ReviewStreamMetadata | undefined {
+  if (!chunk.type || !chunk.phase) return current;
+
+  const next = current
+    ? {
+        ...current,
+        dimensions: current.dimensions.map((item) => ({ ...item })),
+      }
+    : createEmptyReviewStreamMetadata();
+
+  switch (chunk.type) {
+    case 'status':
+      next.statusText += chunk.text || '';
+      break;
+    case 'dimension_start':
+      if (chunk.dimension) {
+        ensureDimensionStarted(next.dimensions, chunk.dimension);
+      }
+      break;
+    case 'dimension_chunk':
+      if (chunk.dimension) {
+        appendDimensionChunk(next.dimensions, chunk.dimension, chunk.text || '');
+      }
+      break;
+    case 'dimension_done':
+      if (chunk.dimension) {
+        updateDimensionDone(
+          next.dimensions,
+          chunk.dimension,
+          chunk.ok,
+          chunk.duration,
+        );
+      }
+      break;
+    case 'summary_chunk':
+      next.summaryText += chunk.text || '';
+      break;
+    case 'comment_status':
+    case 'final':
+      next.finalText += chunk.text || '';
+      break;
+    default:
+      break;
+  }
+
+  return next;
+}
 
 /**
  * 发送消息：
@@ -11,7 +118,7 @@ import type { ChatMessage } from '../types/chat';
 export async function sendChatMessage(
   sessionId: string,
   content: string,
-  onStreaming: (text: string) => void,
+  onStreaming: (state: StreamingAssistantState | null) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const text = content.trim();
@@ -40,6 +147,7 @@ export async function sendChatMessage(
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let result = '';
+    let reviewStream: ReviewStreamMetadata | undefined;
     let buffer = ''; // 增加缓冲区处理跨 chunk 的行
 
     // 预创建一个 Assistant 消息 ID，用于后续更新
@@ -53,9 +161,10 @@ export async function sendChatMessage(
           role: 'assistant',
           content: result + ' [已停止生成]',
           status: 'success',
+          metadata: reviewStream ? { reviewStream } : undefined,
           createdAt: Date.now(),
         });
-        onStreaming('');
+        onStreaming(null);
         return;
       }
 
@@ -79,9 +188,10 @@ export async function sendChatMessage(
             role: 'assistant',
             content: result,
             status: 'success',
+            metadata: reviewStream ? { reviewStream } : undefined,
             createdAt: Date.now(),
           });
-          onStreaming('');
+          onStreaming(null);
           return;
         }
 
@@ -97,9 +207,18 @@ export async function sendChatMessage(
           // 兼容不同的返回格式：parsed.text 或 parsed.choices[0].delta.content
           const delta =
             parsed.text || parsed.choices?.[0]?.delta?.content || '';
+          reviewStream = applyReviewStreamChunk(
+            reviewStream,
+            parsed as ReviewStreamChunk,
+          );
           if (delta) {
             result += delta;
-            onStreaming(result);
+          }
+          if (delta || reviewStream) {
+            onStreaming({
+              content: result,
+              metadata: reviewStream ? { reviewStream } : undefined,
+            });
           }
         } catch (e) {
           if (e instanceof Error && !data.includes('error')) {

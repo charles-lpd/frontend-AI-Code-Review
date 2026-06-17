@@ -19,6 +19,7 @@ import {
   // useActiveSession,
   useChatStore,
 } from '../../store/useChatStore';
+import type { StreamingAssistantState } from '../../types/chat';
 import MessageItem from './MessageItem/MessageItem';
 import RepoSelector from './RepoSelector';
 import './ChatPanel.css';
@@ -42,7 +43,8 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
   const clearMessages = useChatStore((s) => s.clearMessages);
   const fetchMoreMessages = useChatStore((s) => s.fetchMoreMessages);
   const { send, stop, isLoading, error, clearError } = useChatSend(sessionId);
-  const [streamingMsg, setStreamingMsg] = useState('');
+  const [streamingMsg, setStreamingMsg] =
+    useState<StreamingAssistantState | null>(null);
 
   // 增加局部 state 来管理输入，确保输入的即时响应
   const [inputValue, setInputValue] = useState(draft);
@@ -96,7 +98,7 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
 
   // 监听流式输出内容变化，自动滚动到底部
   useEffect(() => {
-    if (!streamingMsg) return;
+    if (!streamingMsg?.content) return;
 
     const el = listRef.current;
     if (!el) return;
@@ -110,7 +112,7 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
         behavior: 'auto',
       });
     }
-  }, [streamingMsg]);
+  }, [streamingMsg?.content]);
 
   // 当切换会话时，重置初始加载标记
   useEffect(() => {
@@ -145,8 +147,9 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
       {
         id: 'streaming-temp-id',
         role: 'assistant' as const,
-        content: streamingMsg,
+        content: streamingMsg.content,
         status: 'sending' as const,
+        metadata: streamingMsg.metadata,
       },
     ];
   }, [messages, streamingMsg]);
@@ -157,7 +160,7 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
 
   const submit = () => {
     if (!sessionId || isLoading || !inputValue.trim()) return;
-    void send(inputValue, (val) => setStreamingMsg(val));
+    void send(inputValue, (state) => setStreamingMsg(state));
     setInputValue(''); // 发送后清空局部 state
   };
 
@@ -226,10 +229,14 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
         )}
         {messagesHistory.map((m) => (
           <div className="message-container" key={m.id}>
-            <MessageItem role={m.role} content={m.content} />
+            <MessageItem
+              role={m.role}
+              content={m.content}
+              metadata={m.metadata}
+            />
           </div>
         ))}
-        {isLoading && !streamingMsg && (
+        {isLoading && !streamingMsg?.content && (
           <div className="message-container">
             <div className="chat__loading-indicator">
               <div className="dot-pulse"></div>

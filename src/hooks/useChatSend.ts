@@ -3,6 +3,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import { sendChatMessage } from '../services/sendChatMessage';
+import type { StreamingAssistantState } from '../types/chat';
 
 export function useChatSend(sessionId: string | undefined) {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +19,10 @@ export function useChatSend(sessionId: string | undefined) {
   }, []);
 
   const send = useCallback(
-    async (content: string, onChange: (text: string) => void) => {
+    async (
+      content: string,
+      onChange: (state: StreamingAssistantState | null) => void,
+    ) => {
       if (!sessionId) return;
 
       const text = content.trim();
