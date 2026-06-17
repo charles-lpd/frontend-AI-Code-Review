@@ -48,9 +48,54 @@ export const useChatStore = create<ChatStore>()(
 
       /** 加载所有会话列表 */
       fetchSessions: async (force = false) => {
-        // 如果已经成功请求过后端且不是强制刷新，则跳过
-        // 注意：这里不再检查 sessions.length，因为本地可能有缓存数据，但我们仍需同步后端
-        if (!force && get().hasFetched) return;
+        const { sessions } = get();
+
+        // 如果有本地缓存数据且不是强制刷新，直接使用本地缓存，后台静默同步后端
+        if (!force && sessions.length > 0) {
+          // 后台异步同步后端数据，不阻塞 UI
+          (async () => {
+            try {
+              const rawSessions = await sessionApi.list();
+              set((state) => {
+                // 合并本地和后端数据
+                const backendSessions = new Map(
+                  rawSessions.map((s) => [s.id, s]),
+                );
+                const mergedSessions = state.sessions.map((localSession) => {
+                  const backendSession = backendSessions.get(localSession.id);
+                  if (backendSession) {
+                    // 如果后端有这个会话，保留本地消息，更新其他字段
+                    return {
+                      ...backendSession,
+                      messages:
+                        localSession.messages || backendSession.messages || [],
+                      detailsLoaded: localSession.detailsLoaded,
+                      hasMore: localSession.hasMore,
+                      lastCursor: localSession.lastCursor,
+                      draft: localSession.draft,
+                    };
+                  }
+                  return localSession;
+                });
+
+                // 添加后端有但本地没有的会话
+                rawSessions.forEach((backendSession) => {
+                  if (!mergedSessions.find((s) => s.id === backendSession.id)) {
+                    mergedSessions.unshift({
+                      ...backendSession,
+                      detailsLoaded: false,
+                    });
+                  }
+                });
+
+                return { sessions: mergedSessions };
+              });
+            } catch (err) {
+              console.error('后台同步会话失败:', err);
+            }
+          })();
+          return;
+        }
 
         set({ isLoading: true, error: null });
         try {
@@ -73,6 +118,49 @@ export const useChatStore = create<ChatStore>()(
 
       /** 加载会话详情（初始第一页消息） */
       fetchSessionDetail: async (id: string, limit = 10) => {
+        const session = get().sessions.find((s) => s.id === id);
+
+        // 如果本地已经有缓存的消息，直接使用本地消息，后台同步最新消息
+        if (
+          session &&
+          session.messages &&
+          session.messages.length > 0 &&
+          session.detailsLoaded
+        ) {
+          // 后台异步同步最新消息，不阻塞 UI
+          (async () => {
+            try {
+              const detail = await sessionApi.get(id, limit);
+              const newMessages = detail.messages || [];
+
+              set((state) => ({
+                sessions: state.sessions.map((s) => {
+                  if (s.id !== id) return s;
+
+                  // 合并本地和后端消息（去重）
+                  const existingIds = new Set(s.messages.map((m) => m.id));
+                  const mergedMessages = [
+                    ...s.messages,
+                    ...newMessages.filter((m) => !existingIds.has(m.id)),
+                  ].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+                  return {
+                    ...s,
+                    ...detail,
+                    messages: mergedMessages,
+                    detailsLoaded: true,
+                    hasMore: newMessages.length >= limit,
+                    lastCursor: newMessages[0]?.id || s.lastCursor,
+                  };
+                }),
+              }));
+            } catch (err) {
+              console.error('后台同步会话详情失败:', err);
+            }
+          })();
+          return;
+        }
+
         try {
           const detail = await sessionApi.get(id, limit);
           const messages = detail.messages || [];
@@ -247,15 +335,18 @@ export const useChatStore = create<ChatStore>()(
     {
       name: 'everpay-chat-storage', // 存储在 localStorage 中的 key
       storage: createJSONStorage(() => localStorage),
-      // 核心配置：只持久化 sessions 列表和活跃 ID
-      // 不持久化消息详情 (messages)、加载状态 (isLoading) 和 hasFetched
+      // 核心配置：持久化会话列表和所有消息
+      // 不持久化加载状态等临时状态
       partialize: (state) => ({
         sessions: state.sessions.map((s) => ({
           id: s.id,
           title: s.title,
           updatedAt: s.updatedAt,
-          messages: [], // 持久化时不保存消息，确保下次进来是干净的
-          detailsLoaded: false,
+          messages: s.messages, // 保存所有消息到本地缓存
+          draft: s.draft, // 保存草稿
+          detailsLoaded: s.detailsLoaded,
+          hasMore: s.hasMore,
+          lastCursor: s.lastCursor,
         })),
         activeSessionId: state.activeSessionId,
       }),
