@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { githubApi, type GithubRepo } from '../../api/github';
-import { Code, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
+import { Code, ExternalLink, Loader2, AlertCircle, GitBranch } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 import './RepoSelector.css';
 
 interface RepoSelectorProps {
@@ -8,6 +9,7 @@ interface RepoSelectorProps {
 }
 
 export default function RepoSelector({ onSelect }: RepoSelectorProps) {
+  const { isAuthenticated, login } = useAuth();
   const [repos, setRepos] = useState<GithubRepo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,18 @@ export default function RepoSelector({ onSelect }: RepoSelectorProps) {
       setLoading(false);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="repo-error">
+        <GitBranch size={16} />
+        <span>请先连接 GitHub</span>
+        <button onClick={login} className="install-link">
+          连接
+        </button>
+      </div>
+    );
+  }
 
   if (error === 'REPO_NOT_FOUND') {
     return (
