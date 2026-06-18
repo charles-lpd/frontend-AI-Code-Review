@@ -151,3 +151,71 @@
     transform: rotate(360deg);
   }
 }
+
+@media (max-width: 768px) {
+  .repo-selector {
+    margin-bottom: 10px;
+  }
+
+  .repo-selector__trigger {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .repo-selector__dropdown {
+    max-height: min(50vh, 360px);
+    border-radius: 10px;
+  }
+
+  .repo-selector__header {
+    padding: 10px 12px;
+  }
+
+  .repo-selector__header h3 {
+    font-size: 13px;
+  }
+
+  .repo-selector__list {
+    padding: 6px;
+  }
+
+  .repo-item {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .repo-item__info {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .repo-item__name {
+    font-size: 12px;
+    word-break: break-word;
+  }
+
+  .repo-error {
+    padding: 10px 12px;
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .repo-selector__trigger {
+    padding: 9px 10px;
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .repo-selector__dropdown {
+    max-height: min(55vh, 320px);
+  }
+
+  .repo-item__badge {
+    font-size: 9px;
+    padding: 2px 5px;
+  }
+}
