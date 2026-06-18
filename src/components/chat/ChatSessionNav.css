@@ -52,8 +52,12 @@
   text-align: left;
 }
 
-.session-nav__new:hover {
-  background: #e5e7eb;
+.session-nav__new--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  text-align: center;
 }
 
 .session-nav__list {
@@ -150,7 +154,7 @@
   padding: 0.75rem 0.5rem;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 1024px) {
   .session-nav__desktop-header {
     display: none;
   }

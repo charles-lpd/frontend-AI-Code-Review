@@ -3,7 +3,7 @@
  */
 import type { MouseEvent } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { PanelLeft, PanelRightClose, X } from 'lucide-react';
+import { PanelLeft, PanelRightClose, Plus, X } from 'lucide-react';
 import { useChatStore } from '../../store/useChatStore';
 import './ChatSessionNav.css';
 
@@ -104,37 +104,45 @@ export default function ChatSessionNav({
             <X size={18} />
           </button>
         </div>
-        <button type="button" className="session-nav__new" onClick={handleNew}>
-          + 新对话
+        <button
+          type="button"
+          className={`session-nav__new${desktopCollapsed ? ' session-nav__new--icon' : ''}`}
+          onClick={handleNew}
+          aria-label="新对话"
+          title="新对话"
+        >
+          {desktopCollapsed ? <Plus size={18} /> : '+ 新对话'}
         </button>
-        <ul className="session-nav__list">
-          {sessions.map((session) => (
-            <li key={session.id}>
-              <NavLink
-                to={`/chat/${session.id}`}
-                className={({ isActive }) =>
-                  `session-nav__item${isActive ? ' session-nav__item--active' : ''}`
-                }
-                onClick={() => onMobileClose?.()}
-              >
-                <span className="session-nav__title">{session.title}</span>
-                {sendingSessionId === session.id && (
-                  <span className="session-nav__badge">…</span>
-                )}
-                {sessions.length > 1 && (
-                  <button
-                    type="button"
-                    className="session-nav__delete"
-                    title="删除会话"
-                    onClick={(e) => handleRemove(e, session.id)}
-                  >
-                    ×
-                  </button>
-                )}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+        {!desktopCollapsed && (
+          <ul className="session-nav__list">
+            {sessions.map((session) => (
+              <li key={session.id}>
+                <NavLink
+                  to={`/chat/${session.id}`}
+                  className={({ isActive }) =>
+                    `session-nav__item${isActive ? ' session-nav__item--active' : ''}`
+                  }
+                  onClick={() => onMobileClose?.()}
+                >
+                  <span className="session-nav__title">{session.title}</span>
+                  {sendingSessionId === session.id && (
+                    <span className="session-nav__badge">…</span>
+                  )}
+                  {sessions.length > 1 && (
+                    <button
+                      type="button"
+                      className="session-nav__delete"
+                      title="删除会话"
+                      onClick={(e) => handleRemove(e, session.id)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        )}
       </aside>
     </>
   );

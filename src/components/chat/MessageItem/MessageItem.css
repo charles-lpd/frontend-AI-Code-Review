@@ -5,6 +5,7 @@
   padding: 1.5rem 0;
   animation: fadeIn 0.3s ease-out;
   position: relative;
+  min-width: 0;
 }
 
 @keyframes fadeIn {
