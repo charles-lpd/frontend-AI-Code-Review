@@ -119,6 +119,12 @@
   background: #f3f4f6;
 }
 
+.app__main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 @media (max-width: 480px) {
   .nav--chat-mobile {
     position: fixed;
