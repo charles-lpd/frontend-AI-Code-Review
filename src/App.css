@@ -125,7 +125,7 @@
   overflow: hidden;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 1024px) {
   .nav--chat-mobile {
     position: fixed;
     top: -100vh;

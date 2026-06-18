@@ -106,14 +106,14 @@ export default function ChatSessionNav({
         </div>
         <button
           type="button"
-          className={`session-nav__new${desktopCollapsed ? ' session-nav__new--icon' : ''}`}
+          className={`session-nav__new${desktopCollapsed && !mobileOpen ? ' session-nav__new--icon' : ''}`}
           onClick={handleNew}
           aria-label="新对话"
           title="新对话"
         >
-          {desktopCollapsed ? <Plus size={18} /> : '+ 新对话'}
+          {desktopCollapsed && !mobileOpen ? <Plus size={18} /> : '+ 新对话'}
         </button>
-        {!desktopCollapsed && (
+        {(!desktopCollapsed || mobileOpen) && (
           <ul className="session-nav__list">
             {sessions.map((session) => (
               <li key={session.id}>
