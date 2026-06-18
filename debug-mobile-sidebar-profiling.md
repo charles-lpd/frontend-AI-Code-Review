@@ -26,3 +26,8 @@
 - 采集点击打开前后的高精度时间点
 - 结合浏览器 Performance Timeline 判定 render/style/layout/paint 占比
 - 汇总 top 耗时组件 / 函数 / 阶段
+
+## 当前证据
+- `performance.mark('sidebar-open-click-start')` 与 `sidebar-close-click-start` 已成功记录，说明点击路径已进入回调。
+- `window.__SIDEBAR_PROFILE__` 为空，说明第一版 React Profiler 结果没有成功输出到全局桶，当前不能直接作为结论依据。
+- 已补充同步埋点桶 `window.__SIDEBAR_SYNC_PROFILE__`，直接记录 Home / ChatSessionNav / SessionList 的 render-start 证据。

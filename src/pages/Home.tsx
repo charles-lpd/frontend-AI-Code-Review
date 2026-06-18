@@ -9,11 +9,26 @@ import { useAuth } from '../hooks/useAuth';
 import './Home.css';
 
 export default function Home() {
+  const renderStart = performance.now();
   useChatRouteSync();
   const { isAuthenticated } = useAuth();
   const [sendingSessionId, setSendingSessionId] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(false);
+
+  if (typeof window !== 'undefined') {
+    const host = window as typeof window & {
+      __SIDEBAR_SYNC_PROFILE__?: unknown[];
+    };
+    const bucket = (host.__SIDEBAR_SYNC_PROFILE__ ??= []);
+    bucket.push({
+      component: 'Home',
+      phase: 'render-start',
+      mobileNavOpen,
+      desktopNavCollapsed,
+      ts: renderStart,
+    });
+  }
 
   const onRenderProfiler = useCallback(
     (

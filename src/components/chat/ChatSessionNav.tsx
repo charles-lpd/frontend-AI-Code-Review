@@ -29,6 +29,21 @@ const SessionList = memo(function SessionList({
   onMobileClose,
   onRemove,
 }: SessionListProps) {
+  const listRenderStart = performance.now();
+  if (typeof window !== 'undefined') {
+    const host = window as typeof window & {
+      __SIDEBAR_SYNC_PROFILE__?: unknown[];
+    };
+    const bucket = (host.__SIDEBAR_SYNC_PROFILE__ ??= []);
+    bucket.push({
+      component: 'SessionList',
+      phase: 'render-start',
+      sessionsCount: sessions.length,
+      sendingSessionId,
+      ts: listRenderStart,
+    });
+  }
+
   return (
     <ul className="session-nav__list">
       {sessions.map((session) => (
@@ -68,10 +83,27 @@ function ChatSessionNav({
   onDesktopToggle,
   onMobileClose,
 }: ChatSessionNavProps) {
+  const navRenderStart = performance.now();
   const navigate = useNavigate();
   const sessions = useChatStore((s) => s.sessions);
   const createSession = useChatStore((s) => s.createSession);
   const removeSession = useChatStore((s) => s.removeSession);
+
+  if (typeof window !== 'undefined') {
+    const host = window as typeof window & {
+      __SIDEBAR_SYNC_PROFILE__?: unknown[];
+    };
+    const bucket = (host.__SIDEBAR_SYNC_PROFILE__ ??= []);
+    bucket.push({
+      component: 'ChatSessionNav',
+      phase: 'render-start',
+      mobileOpen,
+      desktopCollapsed,
+      sessionsCount: sessions.length,
+      sendingSessionId,
+      ts: navRenderStart,
+    });
+  }
 
   const handleNew = useCallback(async () => {
     try {
