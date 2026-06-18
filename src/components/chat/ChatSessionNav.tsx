@@ -151,14 +151,12 @@ function ChatSessionNav({
         >
           {desktopCollapsed && !mobileOpen ? <Plus size={18} /> : '+ 新对话'}
         </button>
-        {(!desktopCollapsed || mobileOpen) && (
-          <SessionList
-            sessions={sessions}
-            sendingSessionId={sendingSessionId}
-            onMobileClose={onMobileClose}
-            onRemove={handleRemove}
-          />
-        )}
+        <SessionList
+          sessions={sessions}
+          sendingSessionId={sendingSessionId}
+          onMobileClose={onMobileClose}
+          onRemove={handleRemove}
+        />
       </aside>
     </>
   );

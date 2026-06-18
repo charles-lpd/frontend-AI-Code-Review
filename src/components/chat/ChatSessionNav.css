@@ -7,9 +7,6 @@
   padding: 0.75rem 0.5rem;
   background: #f9fafb;
   border-right: 1px solid #e5e7eb;
-  transition:
-    width 0.2s ease,
-    padding 0.2s ease;
 }
 
 .session-nav__overlay,
@@ -71,6 +68,7 @@
   padding: 0;
   list-style: none;
   overflow-y: auto;
+  will-change: transform;
 }
 
 .session-nav__item {
@@ -169,6 +167,12 @@
   padding: 0.75rem 0.5rem;
 }
 
+.session-nav--desktop-collapsed .session-nav__list {
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
 @media (max-width: 1024px) {
   .session-nav__desktop-header {
     display: none;
@@ -222,6 +226,12 @@
   .session-nav--desktop-collapsed .session-nav__item {
     justify-content: flex-start;
     padding: 0.75rem;
+  }
+
+  .session-nav--desktop-collapsed .session-nav__list {
+    opacity: 1;
+    pointer-events: auto;
+    overflow-y: auto;
   }
 
   .session-nav--mobile-open {
