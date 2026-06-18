@@ -1,17 +1,20 @@
-import { NavLink, Route, Routes, Link } from 'react-router-dom';
+import { NavLink, Route, Routes, Link, useLocation } from 'react-router-dom';
 import Home from './pages/Home';
 import Profile from './pages/Profile';
 import { useAuth } from './hooks/useAuth';
 import './App.css';
 
 export default function App() {
+  const location = useLocation();
   const { isAuthenticated, user, login, logout } = useAuth();
+  const isMobileChatRoute =
+    location.pathname === '/' || location.pathname.startsWith('/chat/');
 
   return (
     <div className="app">
-      <nav className="nav">
+      <nav className={`nav${isMobileChatRoute ? ' nav--chat-mobile' : ''}`}>
         <div className="nav__left">
-          <span className="nav__brand">EverPay AI Review T</span>
+          <span className="nav__brand">EverPay AI Review</span>
           <NavLink
             to="/"
             end
@@ -45,7 +48,9 @@ export default function App() {
           )}
         </div>
       </nav>
-      <main className="app__main">
+      <main
+        className={`app__main${isMobileChatRoute ? ' app__main--chat-mobile' : ''}`}
+      >
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/chat/:sessionId" element={<Home />} />

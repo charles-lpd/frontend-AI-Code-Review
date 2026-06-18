@@ -6,3 +6,24 @@
   min-height: 0;
   background: #0a0e17;
 }
+
+@media (max-width: 480px) {
+  .home {
+    position: relative;
+    background: #ffffff;
+  }
+
+  .home > :last-child {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .home--mobile-nav-open::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.18);
+    z-index: 50;
+  }
+}

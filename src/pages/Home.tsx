@@ -11,14 +11,20 @@ export default function Home() {
   useChatRouteSync()
   const { isAuthenticated } = useAuth()
   const [sendingSessionId, setSendingSessionId] = useState<string | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   if (!isAuthenticated) {
     return <ConnectGithub />
   }
 
   return (
-    <div className="home">
-      <ChatSessionNav sendingSessionId={sendingSessionId} />
+    <div className={`home${mobileNavOpen ? ' home--mobile-nav-open' : ''}`}>
+      <ChatSessionNav
+        sendingSessionId={sendingSessionId}
+        mobileOpen={mobileNavOpen}
+        onMobileToggle={() => setMobileNavOpen((prev) => !prev)}
+        onMobileClose={() => setMobileNavOpen(false)}
+      />
       <ChatPanel onSendingChange={setSendingSessionId} />
     </div>
   )

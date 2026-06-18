@@ -494,8 +494,12 @@
 }
 
 @media (max-width: 480px) {
+  .chat {
+    height: 100vh;
+  }
+
   .chat__header {
-    padding: 0.75rem 0.875rem;
+    padding: 0.75rem 0.875rem 0.75rem 3.5rem;
   }
 
   .message-container {

@@ -119,8 +119,19 @@
   background: #f3f4f6;
 }
 
-.app__main {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+@media (max-width: 480px) {
+  .nav--chat-mobile {
+    position: fixed;
+    top: -100vh;
+    left: -100vw;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .app__main--chat-mobile {
+    height: 100vh;
+  }
 }
