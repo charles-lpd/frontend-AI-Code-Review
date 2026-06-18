@@ -21,7 +21,7 @@ export default function ChatSessionNav({
   mobileOpen = false,
   desktopCollapsed = false,
   onDesktopToggle,
-  onMobileToggle,
+  // onMobileToggle,
   onMobileClose,
 }: ChatSessionNavProps) {
   const navigate = useNavigate();
