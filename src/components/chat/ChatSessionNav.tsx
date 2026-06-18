@@ -3,13 +3,15 @@
  */
 import type { MouseEvent } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { PanelLeft, X } from 'lucide-react';
+import { PanelLeft, PanelRightClose, X } from 'lucide-react';
 import { useChatStore } from '../../store/useChatStore';
 import './ChatSessionNav.css';
 
 interface ChatSessionNavProps {
   sendingSessionId?: string | null;
   mobileOpen?: boolean;
+  desktopCollapsed?: boolean;
+  onDesktopToggle?: () => void;
   onMobileToggle?: () => void;
   onMobileClose?: () => void;
 }
@@ -17,6 +19,8 @@ interface ChatSessionNavProps {
 export default function ChatSessionNav({
   sendingSessionId = null,
   mobileOpen = false,
+  desktopCollapsed = false,
+  onDesktopToggle,
   onMobileToggle,
   onMobileClose,
 }: ChatSessionNavProps) {
@@ -55,7 +59,7 @@ export default function ChatSessionNav({
     <>
       <button
         type="button"
-        className="session-nav__mobile-toggle"
+        className={`session-nav__mobile-toggle${mobileOpen ? ' session-nav__mobile-toggle--hidden' : ''}`}
         onClick={onMobileToggle}
         aria-label={mobileOpen ? '关闭会话列表' : '打开会话列表'}
       >
@@ -72,8 +76,23 @@ export default function ChatSessionNav({
       )}
 
       <aside
-        className={`session-nav${mobileOpen ? ' session-nav--mobile-open' : ''}`}
+        className={`session-nav${mobileOpen ? ' session-nav--mobile-open' : ''}${desktopCollapsed ? ' session-nav--desktop-collapsed' : ''}`}
       >
+        <div className="session-nav__desktop-header">
+          <button
+            type="button"
+            className="session-nav__desktop-toggle"
+            onClick={onDesktopToggle}
+            aria-label={desktopCollapsed ? '展开侧边栏' : '收起侧边栏'}
+          >
+            {desktopCollapsed ? (
+              <PanelLeft size={18} />
+            ) : (
+              <PanelRightClose size={18} />
+            )}
+          </button>
+        </div>
+
         <div className="session-nav__mobile-header">
           <div className="session-nav__mobile-brand">EverPay</div>
           <button

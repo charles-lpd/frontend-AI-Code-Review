@@ -7,12 +7,34 @@
   padding: 0.75rem 0.5rem;
   background: #f9fafb;
   border-right: 1px solid #e5e7eb;
+  transition:
+    width 0.2s ease,
+    padding 0.2s ease;
 }
 
 .session-nav__mobile-toggle,
 .session-nav__overlay,
 .session-nav__mobile-header {
   display: none;
+}
+
+.session-nav__desktop-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.session-nav__desktop-toggle {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1a1a1a;
+  cursor: pointer;
 }
 
 .session-nav__new {
@@ -106,9 +128,35 @@
   background: #d1d5db;
 }
 
+.session-nav--desktop-collapsed {
+  width: 72px;
+  padding-left: 0.375rem;
+  padding-right: 0.375rem;
+}
+
+.session-nav--desktop-collapsed .session-nav__new {
+  text-align: center;
+  padding: 0.75rem 0.25rem;
+}
+
+.session-nav--desktop-collapsed .session-nav__title,
+.session-nav--desktop-collapsed .session-nav__badge,
+.session-nav--desktop-collapsed .session-nav__delete {
+  display: none;
+}
+
+.session-nav--desktop-collapsed .session-nav__item {
+  justify-content: center;
+  padding: 0.75rem 0.5rem;
+}
+
 @media (max-width: 480px) {
+  .session-nav__desktop-header {
+    display: none;
+  }
+
   .session-nav__mobile-toggle {
-    position: fixed;
+    position: absolute;
     top: 0.75rem;
     left: 0.75rem;
     z-index: 60;
@@ -122,6 +170,10 @@
     background: rgba(255, 255, 255, 0.96);
     color: #1a1a1a;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  }
+
+  .session-nav__mobile-toggle--hidden {
+    display: none;
   }
 
   .session-nav__overlay {
@@ -144,6 +196,28 @@
     transition: transform 0.2s ease;
     box-shadow: 0 0 0 rgba(0, 0, 0, 0);
     padding-top: 0;
+  }
+
+  .session-nav--desktop-collapsed {
+    width: min(82vw, 280px);
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .session-nav--desktop-collapsed .session-nav__new {
+    text-align: left;
+    padding: 0.75rem;
+  }
+
+  .session-nav--desktop-collapsed .session-nav__title,
+  .session-nav--desktop-collapsed .session-nav__badge,
+  .session-nav--desktop-collapsed .session-nav__delete {
+    display: initial;
+  }
+
+  .session-nav--desktop-collapsed .session-nav__item {
+    justify-content: flex-start;
+    padding: 0.75rem;
   }
 
   .session-nav--mobile-open {

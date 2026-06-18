@@ -528,3 +528,7 @@
     height: 2.375rem;
   }
 }
+
+.home--mobile-nav-open .chat__header {
+  padding-left: 0.875rem;
+}
