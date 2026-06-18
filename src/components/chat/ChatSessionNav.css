@@ -189,15 +189,21 @@
     left: 0;
     bottom: 0;
     z-index: 55;
-    width: 100%;
+    width: min(82vw, 280px);
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     box-shadow: 0 0 0 rgba(0, 0, 0, 0);
     padding-top: 0;
   }
 
-  .session-nav--desktop-collapsed {
+  .session-nav__mobile-header,
+  .session-nav__new,
+  .session-nav__list {
     width: 100%;
+  }
+
+  .session-nav--desktop-collapsed {
+    width: min(82vw, 280px);
     padding-left: 0.5rem;
     padding-right: 0.5rem;
   }
