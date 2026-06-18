@@ -1,7 +1,7 @@
 /**
  * 会话导航：通过 /chat/:sessionId 切换会话
  */
-import type { MouseEvent } from 'react';
+import { memo, useCallback, type MouseEvent } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { PanelLeft, PanelRightClose, Plus, X } from 'lucide-react';
 import { useChatStore } from '../../store/useChatStore';
@@ -16,12 +16,56 @@ interface ChatSessionNavProps {
   onMobileClose?: () => void;
 }
 
-export default function ChatSessionNav({
+interface SessionListProps {
+  sessions: ReturnType<typeof useChatStore.getState>['sessions'];
+  sendingSessionId: string | null;
+  onMobileClose?: () => void;
+  onRemove: (e: MouseEvent, id: string) => void;
+}
+
+const SessionList = memo(function SessionList({
+  sessions,
+  sendingSessionId,
+  onMobileClose,
+  onRemove,
+}: SessionListProps) {
+  return (
+    <ul className="session-nav__list">
+      {sessions.map((session) => (
+        <li key={session.id}>
+          <NavLink
+            to={`/chat/${session.id}`}
+            className={({ isActive }) =>
+              `session-nav__item${isActive ? ' session-nav__item--active' : ''}`
+            }
+            onClick={onMobileClose}
+          >
+            <span className="session-nav__title">{session.title}</span>
+            {sendingSessionId === session.id && (
+              <span className="session-nav__badge">…</span>
+            )}
+            {sessions.length > 1 && (
+              <button
+                type="button"
+                className="session-nav__delete"
+                title="删除会话"
+                onClick={(e) => onRemove(e, session.id)}
+              >
+                ×
+              </button>
+            )}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
+  );
+});
+
+function ChatSessionNav({
   sendingSessionId = null,
   mobileOpen = false,
   desktopCollapsed = false,
   onDesktopToggle,
-  // onMobileToggle,
   onMobileClose,
 }: ChatSessionNavProps) {
   const navigate = useNavigate();
@@ -29,7 +73,7 @@ export default function ChatSessionNav({
   const createSession = useChatStore((s) => s.createSession);
   const removeSession = useChatStore((s) => s.removeSession);
 
-  const handleNew = async () => {
+  const handleNew = useCallback(async () => {
     try {
       const id = await createSession();
       navigate(`/chat/${id}`);
@@ -37,23 +81,26 @@ export default function ChatSessionNav({
     } catch (err) {
       console.error('创建会话失败:', err);
     }
-  };
+  }, [createSession, navigate, onMobileClose]);
 
-  const handleRemove = async (e: MouseEvent, id: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (sessions.length <= 1) return;
+  const handleRemove = useCallback(
+    async (e: MouseEvent, id: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (sessions.length <= 1) return;
 
-    if (window.confirm('确定要删除这个会话吗？')) {
-      await removeSession(id);
-      const currentActiveId = useChatStore.getState().activeSessionId;
-      if (currentActiveId) {
-        navigate(`/chat/${currentActiveId}`, { replace: true });
-      } else {
-        navigate('/', { replace: true });
+      if (window.confirm('确定要删除这个会话吗？')) {
+        await removeSession(id);
+        const currentActiveId = useChatStore.getState().activeSessionId;
+        if (currentActiveId) {
+          navigate(`/chat/${currentActiveId}`, { replace: true });
+        } else {
+          navigate('/', { replace: true });
+        }
       }
-    }
-  };
+    },
+    [sessions.length, removeSession, navigate],
+  );
 
   return (
     <>
@@ -105,36 +152,16 @@ export default function ChatSessionNav({
           {desktopCollapsed && !mobileOpen ? <Plus size={18} /> : '+ 新对话'}
         </button>
         {(!desktopCollapsed || mobileOpen) && (
-          <ul className="session-nav__list">
-            {sessions.map((session) => (
-              <li key={session.id}>
-                <NavLink
-                  to={`/chat/${session.id}`}
-                  className={({ isActive }) =>
-                    `session-nav__item${isActive ? ' session-nav__item--active' : ''}`
-                  }
-                  onClick={() => onMobileClose?.()}
-                >
-                  <span className="session-nav__title">{session.title}</span>
-                  {sendingSessionId === session.id && (
-                    <span className="session-nav__badge">…</span>
-                  )}
-                  {sessions.length > 1 && (
-                    <button
-                      type="button"
-                      className="session-nav__delete"
-                      title="删除会话"
-                      onClick={(e) => handleRemove(e, session.id)}
-                    >
-                      ×
-                    </button>
-                  )}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+          <SessionList
+            sessions={sessions}
+            sendingSessionId={sendingSessionId}
+            onMobileClose={onMobileClose}
+            onRemove={handleRemove}
+          />
         )}
       </aside>
     </>
   );
 }
+
+export default memo(ChatSessionNav);

@@ -1,5 +1,5 @@
 /** 首页：左侧会话导航 + 右侧聊天面板，路由 /chat/:sessionId */
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import ChatPanel from '../components/chat/ChatPanel';
 import ChatSessionNav from '../components/chat/ChatSessionNav';
 import ConnectGithub from '../components/ConnectGithub';
@@ -14,6 +14,18 @@ export default function Home() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(false);
 
+  const handleDesktopToggle = useCallback(() => {
+    setDesktopNavCollapsed((prev) => !prev);
+  }, []);
+
+  const handleMobileOpen = useCallback(() => {
+    setMobileNavOpen(true);
+  }, []);
+
+  const handleMobileClose = useCallback(() => {
+    setMobileNavOpen(false);
+  }, []);
+
   if (!isAuthenticated) {
     return <ConnectGithub />;
   }
@@ -26,13 +38,12 @@ export default function Home() {
         sendingSessionId={sendingSessionId}
         mobileOpen={mobileNavOpen}
         desktopCollapsed={desktopNavCollapsed}
-        onDesktopToggle={() => setDesktopNavCollapsed((prev) => !prev)}
-        onMobileToggle={() => setMobileNavOpen((prev) => !prev)}
-        onMobileClose={() => setMobileNavOpen(false)}
+        onDesktopToggle={handleDesktopToggle}
+        onMobileClose={handleMobileClose}
       />
       <ChatPanel
         onSendingChange={setSendingSessionId}
-        onOpenSessions={() => setMobileNavOpen(true)}
+        onOpenSessions={handleMobileOpen}
       />
     </div>
   );
