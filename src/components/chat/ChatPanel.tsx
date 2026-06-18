@@ -12,7 +12,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useParams } from 'react-router-dom';
-import { Square, Send, Trash2, Bot } from 'lucide-react';
+import { Square, Send, Trash2, Bot, PanelLeft } from 'lucide-react';
 import { useChatSend } from '../../hooks/useChatSend';
 import {
   chatActions,
@@ -26,9 +26,13 @@ import './ChatPanel.css';
 
 interface ChatPanelProps {
   onSendingChange?: (sessionId: string | null) => void;
+  onOpenSessions?: () => void;
 }
 
-export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
+export default function ChatPanel({
+  onSendingChange,
+  onOpenSessions,
+}: ChatPanelProps) {
   const { sessionId } = useParams();
 
   // 直接根据路由中的 sessionId 查找会话，而不是依赖 Store 的 activeSessionId
@@ -179,11 +183,21 @@ export default function ChatPanel({ onSendingChange }: ChatPanelProps) {
   return (
     <div className="chat">
       <header className="chat__header">
-        <div className="chat__header-info">
-          <h1 className="chat__title">{title}</h1>
-          <span className="chat__status">
-            {isLoading ? '助手正在思考...' : '在线'}
-          </span>
+        <div className="chat__header-main">
+          <button
+            type="button"
+            className="chat__sessions-toggle"
+            onClick={onOpenSessions}
+            aria-label="展开会话列表"
+          >
+            <PanelLeft size={18} />
+          </button>
+          <div className="chat__header-info">
+            <h1 className="chat__title">{title}</h1>
+            <span className="chat__status">
+              {isLoading ? '助手正在思考...' : '在线'}
+            </span>
+          </div>
         </div>
         <button
           type="button"

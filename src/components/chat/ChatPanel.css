@@ -15,7 +15,29 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   flex-shrink: 0;
+}
+
+.chat__header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.chat__sessions-toggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1a1a1a;
+  cursor: pointer;
 }
 
 .chat__header-info {
@@ -392,6 +414,12 @@
 }
 
 /* 移动端适配 */
+@media (max-width: 1024px) {
+  .chat__sessions-toggle {
+    display: inline-flex;
+  }
+}
+
 @media (max-width: 768px) {
   .chat {
     min-height: 100%;
@@ -501,7 +529,7 @@
   }
 
   .chat__header {
-    padding: 0.75rem 0.875rem 0.75rem 3.5rem;
+    padding: 0.75rem 0.875rem;
   }
 
   .message-container {

@@ -30,7 +30,10 @@ export default function Home() {
         onMobileToggle={() => setMobileNavOpen((prev) => !prev)}
         onMobileClose={() => setMobileNavOpen(false)}
       />
-      <ChatPanel onSendingChange={setSendingSessionId} />
+      <ChatPanel
+        onSendingChange={setSendingSessionId}
+        onOpenSessions={() => setMobileNavOpen(true)}
+      />
     </div>
   );
 }

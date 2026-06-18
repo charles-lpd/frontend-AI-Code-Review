@@ -57,15 +57,6 @@ export default function ChatSessionNav({
 
   return (
     <>
-      <button
-        type="button"
-        className={`session-nav__mobile-toggle${mobileOpen ? ' session-nav__mobile-toggle--hidden' : ''}`}
-        onClick={onMobileToggle}
-        aria-label={mobileOpen ? '关闭会话列表' : '打开会话列表'}
-      >
-        <PanelLeft size={18} />
-      </button>
-
       {mobileOpen && (
         <button
           type="button"
