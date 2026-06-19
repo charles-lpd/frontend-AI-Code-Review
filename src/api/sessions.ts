@@ -1,35 +1,84 @@
-import type { ChatSession } from '../types/chat';
+import type {
+  ChatSession,
+  SessionKnowledgeFile,
+  SessionManageConfig,
+} from '../types/chat';
 import {
   listSessions,
   createSQLSession,
   getSessionDetail,
   deleteSession,
+  updateSessionManage,
+  uploadSessionKnowledge,
+  deleteSessionKnowledge,
 } from './index';
 
+function normalizeManageConfig(session: any): SessionManageConfig {
+  return {
+    isPublic: session.manageConfig?.isPublic ?? session.isPublic ?? false,
+    systemPrompt:
+      session.manageConfig?.systemPrompt ?? session.systemPrompt ?? '',
+    knowledgeFiles: session.manageConfig?.knowledgeFiles ?? [],
+  };
+}
+
+function normalizeSession(session: any): ChatSession {
+  return {
+    ...session,
+    updatedAt: session.updatedAt
+      ? new Date(session.updatedAt).getTime()
+      : session.createdAt
+        ? new Date(session.createdAt).getTime()
+        : Date.now(),
+    messages: session.messages || [],
+    draft: session.draft || '',
+    manageConfig: normalizeManageConfig(session),
+  } as ChatSession;
+}
+
 export const sessionApi = {
-  /** 获取所有会话列表 */
   async list(): Promise<ChatSession[]> {
-    return listSessions();
+    const sessions = await listSessions();
+    return sessions.map(normalizeSession);
   },
 
-  /** 获取特定会话详情（支持分页消息） */
   async get(id: string, limit?: number, cursor?: string): Promise<ChatSession> {
-    return getSessionDetail(id, limit, cursor);
+    const session = await getSessionDetail(id, limit, cursor);
+    return normalizeSession(session);
   },
 
-  /** 创建新会话 */
   async create(title?: string): Promise<ChatSession> {
     const data = await createSQLSession(title);
-    return {
-      ...data,
-      messages: [],
-      draft: '',
-      updatedAt: Date.now(),
-    } as ChatSession;
+    return normalizeSession(data);
   },
 
-  /** 删除会话 */
   async delete(id: string): Promise<void> {
     return deleteSession(id);
+  },
+
+  async updateManageConfig(
+    id: string,
+    payload: {
+      isPublic?: boolean;
+      systemPrompt?: string;
+    },
+  ): Promise<ChatSession> {
+    const session = await updateSessionManage(id, payload);
+    return normalizeSession(session);
+  },
+
+  async uploadKnowledge(
+    id: string,
+    files: File[],
+  ): Promise<SessionKnowledgeFile[]> {
+    const result = await uploadSessionKnowledge(id, files);
+    return result.knowledgeFiles ?? [];
+  },
+
+  async deleteKnowledge(
+    id: string,
+    fileId: string,
+  ): Promise<{ success: boolean }> {
+    return deleteSessionKnowledge(id, fileId);
   },
 };

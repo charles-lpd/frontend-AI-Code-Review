@@ -4,6 +4,20 @@ export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
 /** 消息状态 */
 export type MessageStatus = 'pending' | 'sending' | 'error' | 'success';
 
+export interface SessionKnowledgeFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  uploadedAt: number;
+}
+
+export interface SessionManageConfig {
+  isPublic?: boolean;
+  systemPrompt?: string;
+  knowledgeFiles?: SessionKnowledgeFile[];
+}
+
 /** 工具调用定义 */
 export interface ToolCall {
   id: string;
@@ -98,4 +112,5 @@ export interface ChatSession {
     temperature?: number;
     useKnowledgeBase?: boolean;
   };
+  manageConfig?: SessionManageConfig;
 }
