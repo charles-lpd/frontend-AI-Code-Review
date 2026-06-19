@@ -1,5 +1,5 @@
 /** 首页：左侧会话导航 + 右侧聊天面板，路由 /chat/:sessionId */
-import { Profiler, useCallback, useState } from 'react';
+import { Profiler, memo, useCallback, useState } from 'react';
 
 import ChatPanel from '../components/chat/ChatPanel';
 import ChatSessionNav from '../components/chat/ChatSessionNav';
@@ -7,6 +7,8 @@ import ConnectGithub from '../components/ConnectGithub';
 import { useChatRouteSync } from '../hooks/useChatRouteSync';
 import { useAuth } from '../hooks/useAuth';
 import './Home.css';
+
+const MemoizedChatPanel = memo(ChatPanel);
 
 export default function Home() {
   const renderStart = performance.now();
@@ -92,7 +94,7 @@ export default function Home() {
           />
         </Profiler>
         <Profiler id="ChatPanel" onRender={onRenderProfiler}>
-          <ChatPanel
+          <MemoizedChatPanel
             onSendingChange={setSendingSessionId}
             onOpenSessions={handleMobileOpen}
           />
