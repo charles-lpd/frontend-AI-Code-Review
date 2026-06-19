@@ -98,12 +98,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.15s ease;
 }
 
 .session-nav__badge {
   flex-shrink: 0;
   font-size: 0.75rem;
   color: #6b7280;
+  opacity: 1;
+  transition: opacity 0.15s ease;
 }
 
 .session-nav__delete {
@@ -220,7 +224,8 @@
   .session-nav--desktop-collapsed .session-nav__title,
   .session-nav--desktop-collapsed .session-nav__badge,
   .session-nav--desktop-collapsed .session-nav__delete {
-    display: initial;
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .session-nav--desktop-collapsed .session-nav__item {
