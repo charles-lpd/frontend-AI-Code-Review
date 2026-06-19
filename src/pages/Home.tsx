@@ -4,7 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
-  useMemo,
+  // useMemo,
   useState,
 } from 'react';
 
@@ -42,10 +42,6 @@ export default function Home() {
   );
   const [sidebarTransitionEnabled, setSidebarTransitionEnabled] =
     useState(false);
-  const isDesktop = useMemo(() => {
-    if (typeof window === 'undefined') return true;
-    return window.matchMedia(DESKTOP_MEDIA_QUERY).matches;
-  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
