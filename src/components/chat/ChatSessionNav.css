@@ -81,7 +81,11 @@
   color: #1a1a1a;
   text-decoration: none;
   border-radius: 8px;
-  transition: background 0.15s ease;
+  overflow: hidden;
+  transition:
+    background 0.15s ease,
+    padding 0.24s ease,
+    justify-content 0.24s ease;
 }
 
 .session-nav__item:hover {
@@ -225,6 +229,7 @@
   .session-nav--desktop-collapsed .session-nav__badge,
   .session-nav--desktop-collapsed .session-nav__delete {
     opacity: 1;
+    transform: translateX(0);
     pointer-events: auto;
   }
 
