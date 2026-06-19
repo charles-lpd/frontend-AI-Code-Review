@@ -7,6 +7,7 @@
   padding: 0.75rem 0.5rem;
   background: #f9fafb;
   border-right: 1px solid #e5e7eb;
+  transition:  0.3s all;
 }
 
 .session-nav__overlay,
