@@ -59,6 +59,7 @@ export const sessionApi = {
   async updateManageConfig(
     id: string,
     payload: {
+      title?: string;
       isPublic?: boolean;
       systemPrompt?: string;
     },

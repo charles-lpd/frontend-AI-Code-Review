@@ -13,6 +13,7 @@ export interface SessionKnowledgeFile {
 }
 
 export interface SessionManageConfig {
+  title?: string;
   isPublic?: boolean;
   systemPrompt?: string;
   knowledgeFiles?: SessionKnowledgeFile[];

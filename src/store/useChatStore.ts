@@ -288,7 +288,15 @@ export const useChatStore = create<ChatStore>()(
       },
 
       updateSessionManageConfig: async (sessionId, patch) => {
-        const session = await sessionApi.updateManageConfig(sessionId, patch);
+        const session = await sessionApi.updateManageConfig(sessionId, {
+          title: typeof patch.title === 'string' ? patch.title : undefined,
+          isPublic:
+            typeof patch.isPublic === 'boolean' ? patch.isPublic : undefined,
+          systemPrompt:
+            typeof patch.systemPrompt === 'string'
+              ? patch.systemPrompt
+              : undefined,
+        });
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === sessionId

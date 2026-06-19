@@ -127,6 +127,7 @@ export const deleteSession = async (sessionId: string): Promise<void> => {
 export const updateSessionManage = async (
   sessionId: string,
   payload: {
+    title?: string;
     isPublic?: boolean;
     systemPrompt?: string;
   },
