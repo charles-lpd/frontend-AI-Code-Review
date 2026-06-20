@@ -85,6 +85,24 @@
   gap: 0.75rem;
 }
 
+.chat__meta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.chat__meta-link:hover {
+  background: #f3f4f6;
+}
+
 .chat__meta-toggle,
 .chat__meta-save,
 .chat__visibility,
