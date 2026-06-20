@@ -6,9 +6,7 @@ import {
   useState,
   type ChangeEvent,
 } from 'react';
-import { Modal, Spin, message } from 'antd';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Modal, Skeleton, Spin, message } from 'antd';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -20,6 +18,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import MessageItem from '../components/chat/MessageItem/MessageItem';
 import { sessionApi } from '../api/sessions';
 import type { KnowledgePreviewResult } from '../api/index';
 import { useChatStore } from '../store/useChatStore';
@@ -31,17 +30,11 @@ function formatFileSize(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-type PreviewState =
-  | {
-      open: false;
-      fileName: string;
-      data: null;
-    }
-  | {
-      open: true;
-      fileName: string;
-      data: KnowledgePreviewResult;
-    };
+type PreviewState = {
+  open: boolean;
+  fileName: string;
+  data: KnowledgePreviewResult | null;
+};
 
 function getPreviewErrorMessage(error: any) {
   const status = error?.status;
@@ -116,7 +109,7 @@ export default function ChatDetail() {
 
   useEffect(() => {
     return () => {
-      if (previewState.open && previewState.data.kind === 'pdf') {
+      if (previewState.data?.kind === 'pdf') {
         URL.revokeObjectURL(previewState.data.blobUrl);
       }
     };
@@ -209,6 +202,11 @@ export default function ChatDetail() {
   const handlePreviewKnowledge = useCallback(
     async (fileId: string, fileName: string) => {
       if (!sessionId) return;
+      setPreviewState({
+        open: true,
+        fileName,
+        data: null,
+      });
       setPreviewLoading(true);
       try {
         const data = await sessionApi.getKnowledgeContent(sessionId, fileId);
@@ -218,6 +216,11 @@ export default function ChatDetail() {
           data,
         });
       } catch (err: any) {
+        setPreviewState({
+          open: false,
+          fileName: '',
+          data: null,
+        });
         messageApi.error(getPreviewErrorMessage(err));
       } finally {
         setPreviewLoading(false);
@@ -228,7 +231,7 @@ export default function ChatDetail() {
 
   const handleClosePreview = useCallback(() => {
     setPreviewState((prev) => {
-      if (prev.open && prev.data.kind === 'pdf') {
+      if (prev.data?.kind === 'pdf') {
         URL.revokeObjectURL(prev.data.blobUrl);
       }
       return {
@@ -424,7 +427,11 @@ export default function ChatDetail() {
         width={960}
         onCancel={handleClosePreview}
       >
-        {previewLoading || !previewState.open ? (
+        {previewLoading ? (
+          <div className="chat-detail-page__preview-loading">
+            <Skeleton active paragraph={{ rows: 8 }} />
+          </div>
+        ) : !previewState.data ? (
           <div className="chat-detail-page__preview-loading">
             <Spin />
           </div>
@@ -436,9 +443,7 @@ export default function ChatDetail() {
           />
         ) : previewState.data.kind === 'markdown' ? (
           <div className="chat-detail-page__preview-markdown">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {previewState.data.text}
-            </ReactMarkdown>
+            <MessageItem role="assistant" content={previewState.data.text} />
           </div>
         ) : (
           <pre className="chat-detail-page__preview-text">
