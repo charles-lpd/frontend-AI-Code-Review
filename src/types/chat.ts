@@ -26,6 +26,7 @@ export interface PublicSessionInfo {
   createdAt: number;
   warning: string | null;
   manageConfig: SessionManageConfig;
+  cachedAt?: number;
 }
 
 export interface PublicChatMessage {

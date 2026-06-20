@@ -9,6 +9,7 @@ import {
 import { Empty, message } from 'antd';
 import { Bot, PanelLeft, Send, Square, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import MessageItem from '../components/chat/MessageItem/MessageItem';
 import { sendPublicChatStream } from '../api/index';
 import { sessionApi } from '../api/sessions';
 import type { PublicChatMessage, PublicSessionInfo } from '../types/chat';
@@ -24,6 +25,7 @@ type PublicSessionHistoryItem = {
   sessionId: string;
   title: string;
   lastActiveAt: number;
+  sessionInfo?: PublicSessionInfo;
 };
 
 function readStoredBoolean(key: string, fallback = false) {
@@ -57,19 +59,14 @@ function writePublicSessionHistory(items: PublicSessionHistoryItem[]) {
   window.localStorage.setItem(publicSessionListKey, JSON.stringify(items));
 }
 
-function touchPublicSessionHistory(
-  sessionId: string,
-  title: string,
-  lastActiveAt: number,
-) {
+function touchPublicSessionHistory(item: PublicSessionHistoryItem) {
   const next = readPublicSessionHistory().filter(
-    (item) => item.sessionId !== sessionId,
+    (historyItem) => historyItem.sessionId !== item.sessionId,
   );
-  next.unshift({ sessionId, title, lastActiveAt });
-  writePublicSessionHistory(
-    next.sort((a, b) => b.lastActiveAt - a.lastActiveAt),
-  );
-  return next.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+  next.unshift(item);
+  const sorted = next.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+  writePublicSessionHistory(sorted);
+  return sorted;
 }
 
 function parseSseChunk(chunk: string) {
@@ -292,15 +289,58 @@ export default function PublicSession() {
 
   useEffect(() => {
     if (!sessionId) return;
+
+    const cachedSession = readPublicSessionHistory().find(
+      (item) => item.sessionId === sessionId,
+    );
+
+    if (cachedSession?.sessionInfo) {
+      setSessionInfo(cachedSession.sessionInfo);
+      setWarning(cachedSession.sessionInfo.warning);
+      setLoading(false);
+    }
+
     const load = async () => {
+      if (cachedSession?.sessionInfo) {
+        queueMicrotask(async () => {
+          try {
+            const detail = await sessionApi.getPublicDetail(sessionId);
+            const nextDetail = {
+              ...detail,
+              cachedAt: Date.now(),
+            };
+            setSessionInfo(nextDetail);
+            setWarning(nextDetail.warning);
+            setHistorySessions(
+              touchPublicSessionHistory({
+                sessionId: nextDetail.id,
+                title: nextDetail.title,
+                lastActiveAt: Date.now(),
+                sessionInfo: nextDetail,
+              }),
+            );
+          } catch {}
+        });
+        return;
+      }
+
       setLoading(true);
       setStreamError(null);
       try {
         const detail = await sessionApi.getPublicDetail(sessionId);
-        setSessionInfo(detail);
-        setWarning(detail.warning);
+        const nextDetail = {
+          ...detail,
+          cachedAt: Date.now(),
+        };
+        setSessionInfo(nextDetail);
+        setWarning(nextDetail.warning);
         setHistorySessions(
-          touchPublicSessionHistory(detail.id, detail.title, Date.now()),
+          touchPublicSessionHistory({
+            sessionId: nextDetail.id,
+            title: nextDetail.title,
+            lastActiveAt: Date.now(),
+            sessionInfo: nextDetail,
+          }),
         );
       } catch (err: any) {
         setSessionInfo(null);
@@ -318,7 +358,12 @@ export default function PublicSession() {
       window.localStorage.setItem(storageKey(sessionId), JSON.stringify(next));
       if (sessionInfo) {
         setHistorySessions(
-          touchPublicSessionHistory(sessionId, sessionInfo.title, lastActiveAt),
+          touchPublicSessionHistory({
+            sessionId,
+            title: sessionInfo.title,
+            lastActiveAt,
+            sessionInfo,
+          }),
         );
       }
     },
@@ -429,7 +474,12 @@ export default function PublicSession() {
         );
         if (sessionInfo) {
           setHistorySessions(
-            touchPublicSessionHistory(sessionId, sessionInfo.title, Date.now()),
+            touchPublicSessionHistory({
+              sessionId,
+              title: sessionInfo.title,
+              lastActiveAt: Date.now(),
+              sessionInfo,
+            }),
           );
         }
         return doneMessages;
@@ -578,21 +628,20 @@ export default function PublicSession() {
                 className="message-container"
                 key={item.id ?? `${item.role}-${item.createdAt}`}
               >
-                <div
-                  className={`public-session-page__message public-session-page__message--${item.role}`}
-                >
-                  <div className="public-session-page__bubble">
-                    {item.warning && (
-                      <div className="public-session-page__message-warning">
-                        系统提醒：{item.warning}
-                      </div>
-                    )}
-                    <div>
-                      {item.content ||
-                        (item.status === 'streaming' ? '...' : '')}
-                    </div>
+                {item.warning && (
+                  <div
+                    className="chat__error public-session-page__message-alert"
+                    role="alert"
+                  >
+                    <span>系统提醒：{item.warning}</span>
                   </div>
-                </div>
+                )}
+                <MessageItem
+                  role={item.role}
+                  content={
+                    item.content || (item.status === 'streaming' ? '...' : '')
+                  }
+                />
               </div>
             ))
           )}

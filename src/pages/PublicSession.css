@@ -18,44 +18,13 @@
   min-width: 0;
 }
 
-.public-session-page__message {
-  display: flex;
-  width: 100%;
-  padding: 0 1.5rem;
-  box-sizing: border-box;
-}
-
-.public-session-page__message--user {
-  justify-content: flex-end;
-}
-
-.public-session-page__message--assistant {
-  justify-content: flex-start;
-}
-
-.public-session-page__bubble {
-  max-width: min(80%, 720px);
-  padding: 0.875rem 1rem;
-  border-radius: 14px;
-  background: #f3f4f6;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.public-session-page__message--user .public-session-page__bubble {
-  background: #111827;
-  color: #fff;
-}
-
-.public-session-page__message-warning {
-  margin-bottom: 0.5rem;
-  color: #d97706;
-  font-size: 0.875rem;
-}
-
-.public-session-page__inline-warning {
+.public-session-page__inline-warning,
+.public-session-page__message-alert {
   margin-bottom: 0;
+}
+
+.public-session-page__message-alert {
+  margin: 0 1.5rem;
 }
 
 .public-session-page__nav-empty {
@@ -63,16 +32,4 @@
   color: #6b7280;
   font-size: 0.875rem;
   list-style: none;
-}
-
-@media (max-width: 1024px) {
-  .public-session-page__message {
-    padding: 0 1rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .public-session-page__bubble {
-    max-width: 100%;
-  }
 }
