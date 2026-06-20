@@ -2,6 +2,7 @@ import { NavLink, Route, Routes, Link, useLocation } from 'react-router-dom';
 import Home from './pages/Home';
 import Profile from './pages/Profile';
 import ChatDetail from './pages/ChatDetail';
+import PublicSession from './pages/PublicSession';
 import { useAuth } from './hooks/useAuth';
 import './App.css';
 
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/chat/:sessionId" element={<Home />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/chat-details/:sessionId" element={<ChatDetail />} />
+          <Route path="/public/session/:id" element={<PublicSession />} />
         </Routes>
       </main>
     </div>

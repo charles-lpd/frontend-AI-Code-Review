@@ -1,6 +1,6 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
-import type { SessionKnowledgeFile } from '../types/chat';
+import type { PublicChatMessage, SessionKnowledgeFile } from '../types/chat';
 
 const validateStatus = function (status: number): boolean {
   return status >= 200 && status < 300;
@@ -31,6 +31,35 @@ export const sendChatStream = async (
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `请求失败: ${response.status}`);
+  }
+
+  return response;
+};
+
+export const sendPublicChatStream = async (
+  sessionId: string,
+  messages: Pick<PublicChatMessage, 'role' | 'content'>[],
+  signal?: AbortSignal,
+) => {
+  const response = await fetch(`${baseUrl}/public/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId,
+      messages,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.error?.message ||
+        errorData.error ||
+        `请求失败: ${response.status}`,
+    );
   }
 
   return response;
@@ -167,6 +196,16 @@ export const deleteSessionKnowledge = async (
   const result = await sendRequest({
     method: 'DELETE',
     url: `${baseUrl}/sessions/${sessionId}/knowledge/${fileId}`,
+  });
+  return result.data;
+};
+
+export const getPublicSessionDetail = async (
+  sessionId: string,
+): Promise<any> => {
+  const result = await sendRequest({
+    method: 'GET',
+    url: `${baseUrl}/public/sessions/${sessionId}`,
   });
   return result.data;
 };

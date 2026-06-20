@@ -61,6 +61,9 @@ export default function ChatDetail() {
     [],
   );
   const maxKnowledgeFileSize = 10 * 1024 * 1024;
+  const publicUrl = isPublicDraft
+    ? `${window.location.origin}/public/session/${sessionId}`
+    : '';
 
   useEffect(() => {
     if (sessionId && !session?.detailsLoaded) {
@@ -209,6 +212,33 @@ export default function ChatDetail() {
               {isPublicDraft ? '公开' : '私有'}
             </button>
           </label>
+          <div className="chat-detail-page__field chat-detail-page__field--full">
+            <span>公开链接</span>
+            {publicUrl ? (
+              <div className="chat-detail-page__public-link-row">
+                <input value={publicUrl} readOnly />
+                <button
+                  type="button"
+                  className="chat-detail-page__link-action"
+                  onClick={async () => {
+                    if (!publicUrl) return;
+                    try {
+                      await navigator.clipboard.writeText(publicUrl);
+                      messageApi.success('公开链接已复制');
+                    } catch {
+                      messageApi.error('复制公开链接失败');
+                    }
+                  }}
+                >
+                  复制链接
+                </button>
+              </div>
+            ) : (
+              <div className="chat-detail-page__public-link-empty">
+                当前为私有会话，开启公开后可复制访问链接。
+              </div>
+            )}
+          </div>
           <label className="chat-detail-page__field chat-detail-page__field--full">
             <span>会话 Prompt</span>
             <textarea

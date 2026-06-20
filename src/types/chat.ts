@@ -19,6 +19,24 @@ export interface SessionManageConfig {
   knowledgeFiles?: SessionKnowledgeFile[];
 }
 
+export interface PublicSessionInfo {
+  id: string;
+  title: string;
+  isPublic: boolean;
+  createdAt: number;
+  warning: string | null;
+  manageConfig: SessionManageConfig;
+}
+
+export interface PublicChatMessage {
+  id?: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt?: number;
+  status?: 'streaming' | 'done' | 'error';
+  warning?: string;
+}
+
 /** 工具调用定义 */
 export interface ToolCall {
   id: string;

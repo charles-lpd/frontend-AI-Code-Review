@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { githubApi, type GithubRepo } from '../api/github';
 import { useChatStore } from '../store/useChatStore';
@@ -17,12 +17,15 @@ import {
 import './Profile.css';
 
 export default function Profile() {
+  const navigate = useNavigate();
   const { user, isAuthenticated } = useAuthStore();
   const sessions = useChatStore((s) => s.sessions);
   const hasFetched = useChatStore((s) => s.hasFetched);
   const fetchSessions = useChatStore((s) => s.fetchSessions);
+  const createSession = useChatStore((s) => s.createSession);
   const [repos, setRepos] = useState<GithubRepo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [creatingSession, setCreatingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,6 +47,19 @@ export default function Profile() {
       setError(err.message || '获取仓库列表失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateSession = async () => {
+    setCreatingSession(true);
+    setError(null);
+    try {
+      const id = await createSession('我的客服会话');
+      navigate(`/chat-details/${id}`);
+    } catch (err: any) {
+      setError(err.message || '创建会话失败');
+    } finally {
+      setCreatingSession(false);
     }
   };
 
@@ -86,6 +102,13 @@ export default function Profile() {
               <MessageSquare size={20} />
               <h2>我的会话 ({sessions.length})</h2>
             </div>
+            <button
+              className="profile__refresh"
+              onClick={() => void handleCreateSession()}
+              disabled={creatingSession}
+            >
+              {creatingSession ? '创建中...' : '新建会话'}
+            </button>
           </div>
 
           {sessions.length === 0 ? (
@@ -99,7 +122,7 @@ export default function Profile() {
                 return (
                   <Link
                     key={session.id}
-                    to={`/chat/${session.id}`}
+                    to={`/chat-details/${session.id}`}
                     className="profile__session-item"
                   >
                     <div className="profile__session-main">
@@ -112,8 +135,13 @@ export default function Profile() {
                         </span>
                       </div>
                       <span className="profile__session-time">
-                        {new Date(session.updatedAt).toLocaleString()}
+                        创建于 {new Date(session.updatedAt).toLocaleString()}
                       </span>
+                      {session.summary && (
+                        <span className="profile__session-time">
+                          {session.summary}
+                        </span>
+                      )}
                     </div>
                   </Link>
                 );

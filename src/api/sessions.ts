@@ -1,5 +1,6 @@
 import type {
   ChatSession,
+  PublicSessionInfo,
   SessionKnowledgeFile,
   SessionManageConfig,
 } from '../types/chat';
@@ -11,6 +12,7 @@ import {
   updateSessionManage,
   uploadSessionKnowledge,
   deleteSessionKnowledge,
+  getPublicSessionDetail,
 } from './index';
 
 function normalizeManageConfig(session: any): SessionManageConfig {
@@ -34,6 +36,19 @@ function normalizeSession(session: any): ChatSession {
     draft: session.draft || '',
     manageConfig: normalizeManageConfig(session),
   } as ChatSession;
+}
+
+function normalizePublicSession(session: any): PublicSessionInfo {
+  return {
+    id: session.id,
+    title: session.title,
+    isPublic: session.isPublic ?? session.manageConfig?.isPublic ?? false,
+    createdAt: session.createdAt
+      ? new Date(session.createdAt).getTime()
+      : Date.now(),
+    warning: session.warning ?? null,
+    manageConfig: normalizeManageConfig(session),
+  };
 }
 
 export const sessionApi = {
@@ -81,5 +96,10 @@ export const sessionApi = {
     fileId: string,
   ): Promise<{ success: boolean }> {
     return deleteSessionKnowledge(id, fileId);
+  },
+
+  async getPublicDetail(id: string): Promise<PublicSessionInfo> {
+    const session = await getPublicSessionDetail(id);
+    return normalizePublicSession(session);
   },
 };
