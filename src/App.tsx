@@ -1,16 +1,31 @@
+import { Suspense, lazy, useMemo } from 'react';
 import { NavLink, Route, Routes, Link, useLocation } from 'react-router-dom';
-import Home from './pages/Home';
-import Profile from './pages/Profile';
-import ChatDetail from './pages/ChatDetail';
-import PublicSession from './pages/PublicSession';
 import { useAuth } from './hooks/useAuth';
 import './App.css';
+
+const Home = lazy(() => import('./pages/Home'));
+const Profile = lazy(() => import('./pages/Profile'));
+const ChatDetail = lazy(() => import('./pages/ChatDetail'));
+const PublicSession = lazy(() => import('./pages/PublicSession'));
 
 export default function App() {
   const location = useLocation();
   const { isAuthenticated, user, login, logout } = useAuth();
   const isMobileChatRoute =
     location.pathname === '/' || location.pathname.startsWith('/chat/');
+
+  const routeContent = useMemo(
+    () => (
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/chat/:sessionId" element={<Home />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/chat-details/:sessionId" element={<ChatDetail />} />
+        <Route path="/public/session/:id" element={<PublicSession />} />
+      </Routes>
+    ),
+    [],
+  );
 
   return (
     <div className="app">
@@ -53,13 +68,9 @@ export default function App() {
       <main
         className={`app__main${isMobileChatRoute ? ' app__main--chat-mobile' : ''}`}
       >
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/chat/:sessionId" element={<Home />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/chat-details/:sessionId" element={<ChatDetail />} />
-          <Route path="/public/session/:id" element={<PublicSession />} />
-        </Routes>
+        <Suspense fallback={<div className="app__loading">加载中...</div>}>
+          {routeContent}
+        </Suspense>
       </main>
     </div>
   );

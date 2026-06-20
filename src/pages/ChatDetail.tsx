@@ -7,9 +7,8 @@ import {
   type ChangeEvent,
 } from 'react';
 import { Modal, Skeleton, Spin, message } from 'antd';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   Database,
   Eye,
   Globe,
@@ -46,7 +45,6 @@ function getPreviewErrorMessage(error: any) {
 
 export default function ChatDetail() {
   const { sessionId } = useParams();
-  const navigate = useNavigate();
   const [messageApi, contextHolder] = message.useMessage();
   const session = useChatStore((s) =>
     s.sessions.find((item) => item.id === sessionId),
