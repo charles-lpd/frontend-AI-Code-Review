@@ -250,14 +250,6 @@ export default function ChatDetail() {
     <div className="chat-detail-page">
       {contextHolder}
       <div className="chat-detail-page__header">
-        <button
-          type="button"
-          className="chat-detail-page__back"
-          onClick={() => navigate(-1)}
-        >
-          <ArrowLeft size={16} />
-          返回
-        </button>
         <div className="chat-detail-page__header-main">
           <h1>会话设置</h1>
           <Link to={`/chat/${sessionId}`} className="chat-detail-page__link">
