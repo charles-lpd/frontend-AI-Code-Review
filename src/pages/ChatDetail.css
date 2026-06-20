@@ -225,12 +225,11 @@
   border: none;
 }
 
-.chat-detail-page__preview-text,
 .chat-detail-page__preview-markdown {
   max-height: 70vh;
   overflow: auto;
   margin: 0;
-  white-space: pre-wrap;
+  white-space: normal;
   word-break: break-word;
 }
 
@@ -240,6 +239,20 @@
 
 .chat-detail-page__preview-markdown .message-item__avatar {
   display: none;
+}
+
+.chat-detail-page__preview-markdown .message-item__content,
+.chat-detail-page__preview-markdown .message-item__content p,
+.chat-detail-page__preview-markdown .message-item__content li,
+.chat-detail-page__preview-markdown .message-item__content blockquote,
+.chat-detail-page__preview-markdown .message-item__content pre,
+.chat-detail-page__preview-markdown .message-item__content code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-detail-page__preview-markdown .message-item__content pre {
+  overflow-x: auto;
 }
 
 @media (max-width: 768px) {
