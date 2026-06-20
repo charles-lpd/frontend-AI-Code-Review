@@ -2,6 +2,18 @@ import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
 import type { PublicChatMessage, SessionKnowledgeFile } from '../types/chat';
 
+export type KnowledgePreviewResult =
+  | {
+      kind: 'markdown' | 'text';
+      contentType: string;
+      text: string;
+    }
+  | {
+      kind: 'pdf';
+      contentType: string;
+      blobUrl: string;
+    };
+
 const validateStatus = function (status: number): boolean {
   return status >= 200 && status < 300;
 };
@@ -173,20 +185,82 @@ export const uploadSessionKnowledge = async (
   sessionId: string,
   files: File[],
 ): Promise<{ knowledgeFiles: SessionKnowledgeFile[] }> => {
+  const token = useAuthStore.getState().token;
   const formData = new FormData();
   files.forEach((file) => {
     formData.append('files', file);
   });
 
-  const result = await sendRequest({
+  const response = await fetch(`${baseUrl}/sessions/${sessionId}/knowledge`, {
     method: 'POST',
-    url: `${baseUrl}/sessions/${sessionId}/knowledge`,
-    data: formData,
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
   });
-  return result.data;
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.error?.message ||
+        errorData.error ||
+        `请求失败: ${response.status}`,
+    );
+  }
+
+  return response.json();
+};
+
+export const getKnowledgeContent = async (
+  sessionId: string,
+  fileId: string,
+): Promise<KnowledgePreviewResult> => {
+  const token = useAuthStore.getState().token;
+  const response = await fetch(
+    `${baseUrl}/sessions/${sessionId}/knowledge/${fileId}/content`,
+    {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    },
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const error = new Error(
+      errorData.error?.message ||
+        errorData.error ||
+        `请求失败: ${response.status}`,
+    );
+    (error as any).status = response.status;
+    throw error;
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+
+  if (contentType.includes('text/markdown')) {
+    return {
+      kind: 'markdown',
+      contentType,
+      text: await response.text(),
+    };
+  }
+
+  if (contentType.includes('text/plain')) {
+    return {
+      kind: 'text',
+      contentType,
+      text: await response.text(),
+    };
+  }
+
+  if (contentType.includes('application/pdf')) {
+    const blob = await response.blob();
+    return {
+      kind: 'pdf',
+      contentType,
+      blobUrl: URL.createObjectURL(blob),
+    };
+  }
+
+  throw new Error('当前文件类型暂不支持在线预览');
 };
 
 export const deleteSessionKnowledge = async (

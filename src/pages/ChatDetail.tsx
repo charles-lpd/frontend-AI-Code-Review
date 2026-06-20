@@ -6,17 +6,22 @@ import {
   useState,
   type ChangeEvent,
 } from 'react';
-import { message } from 'antd';
+import { Modal, Spin, message } from 'antd';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Database,
+  Eye,
   Globe,
   Lock,
   Save,
   Trash2,
   Upload,
 } from 'lucide-react';
+import { sessionApi } from '../api/sessions';
+import type { KnowledgePreviewResult } from '../api/index';
 import { useChatStore } from '../store/useChatStore';
 import './ChatDetail.css';
 
@@ -24,6 +29,26 @@ function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+type PreviewState =
+  | {
+      open: false;
+      fileName: string;
+      data: null;
+    }
+  | {
+      open: true;
+      fileName: string;
+      data: KnowledgePreviewResult;
+    };
+
+function getPreviewErrorMessage(error: any) {
+  const status = error?.status;
+  if (status === 403) return '没有权限查看该知识库文件';
+  if (status === 404) return '文件不存在或会话不存在';
+  if (status === 400) return '当前文件类型暂不支持在线预览';
+  return error?.message || '预览知识库文件失败';
 }
 
 export default function ChatDetail() {
@@ -48,6 +73,13 @@ export default function ChatDetail() {
   const [promptDraft, setPromptDraft] = useState('');
   const [isPublicDraft, setIsPublicDraft] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewState, setPreviewState] = useState<PreviewState>({
+    open: false,
+    fileName: '',
+    data: null,
+  });
   const knowledgeInputRef = useRef<HTMLInputElement | null>(null);
 
   const allowedKnowledgeTypes = useMemo(
@@ -81,6 +113,14 @@ export default function ChatDetail() {
     session?.manageConfig?.systemPrompt,
     session?.manageConfig?.isPublic,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (previewState.open && previewState.data.kind === 'pdf') {
+        URL.revokeObjectURL(previewState.data.blobUrl);
+      }
+    };
+  }, [previewState]);
 
   const handleSave = useCallback(async () => {
     if (!sessionId) return;
@@ -130,7 +170,7 @@ export default function ChatDetail() {
         return;
       }
 
-      setSaving(true);
+      setUploading(true);
       try {
         await addSessionKnowledgeFiles(sessionId, files);
         messageApi.success('知识库文件上传成功');
@@ -138,7 +178,7 @@ export default function ChatDetail() {
       } catch (err: any) {
         messageApi.error(err.message || '上传知识库文件失败');
       } finally {
-        setSaving(false);
+        setUploading(false);
       }
     },
     [
@@ -165,6 +205,39 @@ export default function ChatDetail() {
     },
     [messageApi, removeSessionKnowledgeFile, sessionId],
   );
+
+  const handlePreviewKnowledge = useCallback(
+    async (fileId: string, fileName: string) => {
+      if (!sessionId) return;
+      setPreviewLoading(true);
+      try {
+        const data = await sessionApi.getKnowledgeContent(sessionId, fileId);
+        setPreviewState({
+          open: true,
+          fileName,
+          data,
+        });
+      } catch (err: any) {
+        messageApi.error(getPreviewErrorMessage(err));
+      } finally {
+        setPreviewLoading(false);
+      }
+    },
+    [messageApi, sessionId],
+  );
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewState((prev) => {
+      if (prev.open && prev.data.kind === 'pdf') {
+        URL.revokeObjectURL(prev.data.blobUrl);
+      }
+      return {
+        open: false,
+        fileName: '',
+        data: null,
+      };
+    });
+  }, []);
 
   if (!sessionId) {
     return null;
@@ -196,7 +269,7 @@ export default function ChatDetail() {
             <span>会话名称</span>
             <input
               value={titleDraft}
-              disabled={saving}
+              disabled={saving || uploading}
               onChange={(event) => setTitleDraft(event.target.value)}
             />
           </label>
@@ -205,7 +278,7 @@ export default function ChatDetail() {
             <button
               type="button"
               className={`chat-detail-page__visibility${isPublicDraft ? ' chat-detail-page__visibility--public' : ''}`}
-              disabled={saving}
+              disabled={saving || uploading}
               onClick={() => setIsPublicDraft((prev) => !prev)}
             >
               {isPublicDraft ? <Globe size={16} /> : <Lock size={16} />}
@@ -243,7 +316,7 @@ export default function ChatDetail() {
             <span>会话 Prompt</span>
             <textarea
               value={promptDraft}
-              disabled={saving}
+              disabled={saving || uploading}
               placeholder="输入该会话的系统提示词"
               onChange={(event) => setPromptDraft(event.target.value)}
             />
@@ -264,11 +337,11 @@ export default function ChatDetail() {
             <button
               type="button"
               className="chat-detail-page__upload"
-              disabled={saving}
+              disabled={saving || uploading}
               onClick={() => knowledgeInputRef.current?.click()}
             >
               <Upload size={16} />
-              上传文件
+              {uploading ? '上传中...' : '上传文件'}
             </button>
             <input
               ref={knowledgeInputRef}
@@ -278,6 +351,13 @@ export default function ChatDetail() {
               onChange={handleUploadKnowledge}
             />
           </div>
+
+          {uploading && (
+            <div className="chat-detail-page__uploading">
+              <Spin size="small" />
+              <span>知识库文件上传中，请稍候...</span>
+            </div>
+          )}
 
           <div className="chat-detail-page__knowledge-list">
             {(session?.manageConfig?.knowledgeFiles ?? []).length === 0 ? (
@@ -296,15 +376,28 @@ export default function ChatDetail() {
                       {new Date(file.uploadedAt).toLocaleString()}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="chat-detail-page__delete"
-                    disabled={saving}
-                    onClick={() => void handleDeleteKnowledge(file.id)}
-                  >
-                    <Trash2 size={14} />
-                    删除
-                  </button>
+                  <div className="chat-detail-page__knowledge-actions">
+                    <button
+                      type="button"
+                      className="chat-detail-page__preview"
+                      disabled={saving || uploading || previewLoading}
+                      onClick={() =>
+                        void handlePreviewKnowledge(file.id, file.name)
+                      }
+                    >
+                      <Eye size={14} />
+                      预览
+                    </button>
+                    <button
+                      type="button"
+                      className="chat-detail-page__delete"
+                      disabled={saving || uploading}
+                      onClick={() => void handleDeleteKnowledge(file.id)}
+                    >
+                      <Trash2 size={14} />
+                      删除
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -315,7 +408,7 @@ export default function ChatDetail() {
           <button
             type="button"
             className="chat-detail-page__save"
-            disabled={saving}
+            disabled={saving || uploading}
             onClick={() => void handleSave()}
           >
             <Save size={16} />
@@ -323,6 +416,36 @@ export default function ChatDetail() {
           </button>
         </div>
       </div>
+
+      <Modal
+        open={previewState.open}
+        title={previewState.fileName || '知识库预览'}
+        footer={null}
+        width={960}
+        onCancel={handleClosePreview}
+      >
+        {previewLoading || !previewState.open ? (
+          <div className="chat-detail-page__preview-loading">
+            <Spin />
+          </div>
+        ) : previewState.data.kind === 'pdf' ? (
+          <iframe
+            title={previewState.fileName}
+            src={previewState.data.blobUrl}
+            className="chat-detail-page__preview-frame"
+          />
+        ) : previewState.data.kind === 'markdown' ? (
+          <div className="chat-detail-page__preview-markdown">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {previewState.data.text}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <pre className="chat-detail-page__preview-text">
+            {previewState.data.text}
+          </pre>
+        )}
+      </Modal>
     </div>
   );
 }

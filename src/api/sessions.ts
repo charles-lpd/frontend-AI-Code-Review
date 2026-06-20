@@ -13,6 +13,7 @@ import {
   uploadSessionKnowledge,
   deleteSessionKnowledge,
   getPublicSessionDetail,
+  getKnowledgeContent,
 } from './index';
 
 function normalizeManageConfig(session: any): SessionManageConfig {
@@ -96,6 +97,10 @@ export const sessionApi = {
     fileId: string,
   ): Promise<{ success: boolean }> {
     return deleteSessionKnowledge(id, fileId);
+  },
+
+  async getKnowledgeContent(id: string, fileId: string) {
+    return getKnowledgeContent(id, fileId);
   },
 
   async getPublicDetail(id: string): Promise<PublicSessionInfo> {
