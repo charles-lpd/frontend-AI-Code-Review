@@ -241,14 +241,32 @@
   display: none;
 }
 
-.chat-detail-page__preview-markdown .message-item__content,
+.chat-detail-page__preview-markdown .message-item__content {
+  white-space: normal;
+  word-break: break-word;
+}
+
 .chat-detail-page__preview-markdown .message-item__content p,
 .chat-detail-page__preview-markdown .message-item__content li,
-.chat-detail-page__preview-markdown .message-item__content blockquote,
-.chat-detail-page__preview-markdown .message-item__content pre,
-.chat-detail-page__preview-markdown .message-item__content code {
+.chat-detail-page__preview-markdown .message-item__content blockquote {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.chat-detail-page__preview-markdown .message-item__content pre,
+.chat-detail-page__preview-markdown .message-item__content .code-block pre,
+.chat-detail-page__preview-markdown .message-item__content .code-block code,
+.chat-detail-page__preview-markdown .message-item__content .code-block pre > code {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+}
+
+.chat-detail-page__preview-markdown .message-item__content .code-block pre span {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  display: inline !important;
 }
 
 .chat-detail-page__preview-markdown .message-item__content pre {
