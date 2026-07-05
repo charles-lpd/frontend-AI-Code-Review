@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { baseUrl } from '../api/index';
+import { BACKEND_API_BASE_URL } from '../constants';
 
 interface UserInfo {
   githubId: string;
@@ -37,7 +37,7 @@ export const useAuthStore = create<AuthState>()(
         if (!token) return;
 
         try {
-          const response = await fetch(`${baseUrl}/github/user/info`, {
+          const response = await fetch(`${BACKEND_API_BASE_URL}/github/user/info`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },

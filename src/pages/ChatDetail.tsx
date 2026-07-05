@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import MessageItem from '../components/chat/MessageItem/MessageItem';
 import { sessionApi } from '../api/sessions';
+import { buildPublicSessionUrl } from '../constants';
 import type { KnowledgePreviewResult } from '../api/index';
 import { useChatStore } from '../store/useChatStore';
 import './ChatDetail.css';
@@ -144,7 +145,7 @@ export default function ChatDetail() {
     [knowledgeFiles],
   );
   const publicUrl = isPublicDraft
-    ? `${window.location.origin}/public/session/${sessionId}`
+    ? buildPublicSessionUrl(window.location.origin, sessionId ?? '')
     : '';
 
   useEffect(() => {

@@ -1,8 +1,8 @@
 import axios from 'axios';
+import { BACKEND_API_BASE_URL, GITHUB_API_PREFIX } from '../constants';
 import { useAuthStore } from '../store/useAuthStore';
-import { baseUrl as apiBaseUrl } from './index';
 
-const baseUrl = `${apiBaseUrl}/github`;
+const baseUrl = `${BACKEND_API_BASE_URL}${GITHUB_API_PREFIX}`;
 
 const api = axios.create({
   baseURL: baseUrl,

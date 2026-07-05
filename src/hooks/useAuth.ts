@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 // import { useLocation, useNavigate } from 'react-router-dom';
+import { BACKEND_API_BASE_URL } from '../constants';
 import { useAuthStore } from '../store/useAuthStore';
-import { baseUrl } from '../api/index';
 
 export const useAuth = () => {
   const { setToken, fetchUserInfo, isAuthenticated, logout, user } =
@@ -31,7 +31,7 @@ export const useAuth = () => {
   }, [isAuthenticated, user, fetchUserInfo]);
 
   const login = () => {
-    window.location.href = `${baseUrl}/github/auth/login`;
+    window.location.href = `${BACKEND_API_BASE_URL}/github/auth/login`;
   };
 
   return { isAuthenticated, user, login, logout };

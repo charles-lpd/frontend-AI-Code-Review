@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
+import { BACKEND_API_BASE_URL } from '../constants';
 import { useAuthStore } from '../store/useAuthStore';
 import type { PublicChatMessage, SessionKnowledgeFile } from '../types/chat';
 
@@ -18,7 +19,7 @@ const validateStatus = function (status: number): boolean {
   return status >= 200 && status < 300;
 };
 
-export const baseUrl = 'http://localhost:3000/api';
+export const baseUrl = BACKEND_API_BASE_URL;
 
 export const sendChatStream = async (
   sessionId: string,
