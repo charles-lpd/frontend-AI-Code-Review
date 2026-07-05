@@ -12,16 +12,37 @@ import {
   updateSessionManage,
   uploadSessionKnowledge,
   deleteSessionKnowledge,
+  listSessionKnowledge,
   getPublicSessionDetail,
+  rebuildSessionKnowledge,
+  checkSessionKnowledgeConsistency,
   getKnowledgeContent,
 } from './index';
+
+function normalizeKnowledgeFile(file: any): SessionKnowledgeFile {
+  return {
+    id: file.id,
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    uploadedAt: file.uploadedAt
+      ? new Date(file.uploadedAt).getTime()
+      : file.createdAt
+        ? new Date(file.createdAt).getTime()
+        : Date.now(),
+    indexStatus: file.indexStatus ?? 'ready',
+    indexError: file.indexError ?? null,
+  };
+}
 
 function normalizeManageConfig(session: any): SessionManageConfig {
   return {
     isPublic: session.manageConfig?.isPublic ?? session.isPublic ?? false,
     systemPrompt:
       session.manageConfig?.systemPrompt ?? session.systemPrompt ?? '',
-    knowledgeFiles: session.manageConfig?.knowledgeFiles ?? [],
+    knowledgeFiles: (session.manageConfig?.knowledgeFiles ?? []).map(
+      normalizeKnowledgeFile,
+    ),
   };
 }
 
@@ -63,6 +84,14 @@ export const sessionApi = {
     return normalizeSession(session);
   },
 
+  async listKnowledgeFiles(id: string): Promise<SessionKnowledgeFile[]> {
+    const result = await listSessionKnowledge(id);
+    const knowledgeFiles = Array.isArray(result)
+      ? result
+      : result?.knowledgeFiles ?? [];
+    return knowledgeFiles.map(normalizeKnowledgeFile);
+  },
+
   async create(title?: string): Promise<ChatSession> {
     const data = await createSQLSession(title);
     return normalizeSession(data);
@@ -97,6 +126,16 @@ export const sessionApi = {
     fileId: string,
   ): Promise<{ success: boolean }> {
     return deleteSessionKnowledge(id, fileId);
+  },
+
+  async rebuildKnowledge(id: string): Promise<{ success: boolean }> {
+    return rebuildSessionKnowledge(id);
+  },
+
+  async checkKnowledgeConsistency(
+    id: string,
+  ): Promise<{ ok: boolean; issues?: string[] }> {
+    return checkSessionKnowledgeConsistency(id);
   },
 
   async getKnowledgeContent(id: string, fileId: string) {

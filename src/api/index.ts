@@ -18,7 +18,7 @@ const validateStatus = function (status: number): boolean {
   return status >= 200 && status < 300;
 };
 
-export const baseUrl = 'https://www.adongdong.xyz/api';
+export const baseUrl = 'http://localhost:3000/api';
 
 export const sendChatStream = async (
   sessionId: string,
@@ -270,6 +270,43 @@ export const deleteSessionKnowledge = async (
   const result = await sendRequest({
     method: 'DELETE',
     url: `${baseUrl}/sessions/${sessionId}/knowledge/${fileId}`,
+  });
+  return result.data;
+};
+
+export const listSessionKnowledge = async (
+  sessionId: string,
+): Promise<{
+  knowledgeFiles: SessionKnowledgeFile[];
+}> => {
+  const result = await sendRequest({
+    method: 'GET',
+    url: `${baseUrl}/sessions/${sessionId}/knowledge`,
+  });
+  return result.data;
+};
+
+export const rebuildSessionKnowledge = async (
+  sessionId: string,
+): Promise<{
+  success: boolean;
+}> => {
+  const result = await sendRequest({
+    method: 'POST',
+    url: `${baseUrl}/sessions/${sessionId}/knowledge/rebuild`,
+  });
+  return result.data;
+};
+
+export const checkSessionKnowledgeConsistency = async (
+  sessionId: string,
+): Promise<{
+  ok: boolean;
+  issues?: string[];
+}> => {
+  const result = await sendRequest({
+    method: 'GET',
+    url: `${baseUrl}/sessions/${sessionId}/knowledge/consistency`,
   });
   return result.data;
 };

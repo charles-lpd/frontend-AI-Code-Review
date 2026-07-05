@@ -186,7 +186,7 @@ export default function Profile() {
                 <div className="repo-card__header">
                   <h3 className="repo-card__name">{repo.fullName}</h3>
                   {repo.isPrivate && (
-                    <span className="repo-card__private-badge">
+                    <span className="repo-card__private-badge whitespace-nowrap">
                       <Shield size={10} />
                       私有
                     </span>

@@ -16,6 +16,9 @@ import {
   Save,
   Trash2,
   Upload,
+  RefreshCcw,
+  RotateCcw,
+  ShieldAlert,
 } from 'lucide-react';
 import MessageItem from '../components/chat/MessageItem/MessageItem';
 import { sessionApi } from '../api/sessions';
@@ -35,6 +38,40 @@ type PreviewState = {
   data: KnowledgePreviewResult | null;
 };
 
+type KnowledgeRefreshResult = {
+  files: number;
+  pending: number;
+  failed: number;
+};
+
+function getKnowledgeStatusLabel(
+  status?: 'pending' | 'ready' | 'failed',
+): string {
+  switch (status) {
+    case 'pending':
+      return '索引中';
+    case 'failed':
+      return '索引失败';
+    case 'ready':
+    default:
+      return '已可检索';
+  }
+}
+
+function getKnowledgeStatusClass(
+  status?: 'pending' | 'ready' | 'failed',
+): string {
+  switch (status) {
+    case 'pending':
+      return 'chat-detail-page__knowledge-status--pending';
+    case 'failed':
+      return 'chat-detail-page__knowledge-status--failed';
+    case 'ready':
+    default:
+      return 'chat-detail-page__knowledge-status--ready';
+  }
+}
+
 function getPreviewErrorMessage(error: any) {
   const status = error?.status;
   if (status === 403) return '没有权限查看该知识库文件';
@@ -53,18 +90,26 @@ export default function ChatDetail() {
   const updateSessionManageConfig = useChatStore(
     (s) => s.updateSessionManageConfig,
   );
+  const syncSessionKnowledgeFiles = useChatStore(
+    (s) => s.syncSessionKnowledgeFiles,
+  );
   const addSessionKnowledgeFiles = useChatStore(
     (s) => s.addSessionKnowledgeFiles,
   );
   const removeSessionKnowledgeFile = useChatStore(
     (s) => s.removeSessionKnowledgeFile,
   );
+  const knowledgeFiles =
+    session?.manageConfig?.knowledgeFiles ?? [];
 
   const [titleDraft, setTitleDraft] = useState('');
   const [promptDraft, setPromptDraft] = useState('');
   const [isPublicDraft, setIsPublicDraft] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [refreshingKnowledge, setRefreshingKnowledge] = useState(false);
+  const [rebuildingKnowledge, setRebuildingKnowledge] = useState(false);
+  const [checkingKnowledge, setCheckingKnowledge] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewState, setPreviewState] = useState<PreviewState>({
     open: false,
@@ -84,6 +129,20 @@ export default function ChatDetail() {
     [],
   );
   const maxKnowledgeFileSize = 10 * 1024 * 1024;
+  const pendingKnowledgeFiles = useMemo(
+    () =>
+      knowledgeFiles.filter(
+        (file) => (file.indexStatus ?? 'ready') === 'pending',
+      ),
+    [knowledgeFiles],
+  );
+  const failedKnowledgeFiles = useMemo(
+    () =>
+      knowledgeFiles.filter(
+        (file) => (file.indexStatus ?? 'ready') === 'failed',
+      ),
+    [knowledgeFiles],
+  );
   const publicUrl = isPublicDraft
     ? `${window.location.origin}/public/session/${sessionId}`
     : '';
@@ -104,6 +163,57 @@ export default function ChatDetail() {
     session?.manageConfig?.systemPrompt,
     session?.manageConfig?.isPublic,
   ]);
+
+  const refreshKnowledgeFiles = useCallback(
+    async (silent = false): Promise<KnowledgeRefreshResult | null> => {
+      if (!sessionId) return null;
+
+      if (!silent) {
+        setRefreshingKnowledge(true);
+      }
+
+      try {
+        const files = await sessionApi.listKnowledgeFiles(sessionId);
+        syncSessionKnowledgeFiles(sessionId, files);
+        return {
+          files: files.length,
+          pending: files.filter(
+            (file) => (file.indexStatus ?? 'ready') === 'pending',
+          ).length,
+          failed: files.filter(
+            (file) => (file.indexStatus ?? 'ready') === 'failed',
+          ).length,
+        };
+      } catch (err: any) {
+        if (!silent) {
+          messageApi.error(err.message || '刷新知识库状态失败');
+        }
+        return null;
+      } finally {
+        if (!silent) {
+          setRefreshingKnowledge(false);
+        }
+      }
+    },
+    [messageApi, sessionId, syncSessionKnowledgeFiles],
+  );
+
+  useEffect(() => {
+    if (!sessionId) return;
+    void refreshKnowledgeFiles(true);
+  }, [refreshKnowledgeFiles, sessionId]);
+
+  useEffect(() => {
+    if (!sessionId || uploading || pendingKnowledgeFiles.length === 0) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshKnowledgeFiles(true);
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [pendingKnowledgeFiles.length, refreshKnowledgeFiles, sessionId, uploading]);
 
   useEffect(() => {
     return () => {
@@ -164,6 +274,7 @@ export default function ChatDetail() {
       setUploading(true);
       try {
         await addSessionKnowledgeFiles(sessionId, files);
+        await refreshKnowledgeFiles(true);
         messageApi.success('知识库文件上传成功');
         event.target.value = '';
       } catch (err: any) {
@@ -178,6 +289,7 @@ export default function ChatDetail() {
       maxKnowledgeFileSize,
       messageApi,
       sessionId,
+      refreshKnowledgeFiles,
     ],
   );
 
@@ -187,6 +299,7 @@ export default function ChatDetail() {
       setSaving(true);
       try {
         await removeSessionKnowledgeFile(sessionId, fileId);
+        await refreshKnowledgeFiles(true);
         messageApi.success('知识库文件已删除');
       } catch (err: any) {
         messageApi.error(err.message || '删除知识库文件失败');
@@ -194,8 +307,51 @@ export default function ChatDetail() {
         setSaving(false);
       }
     },
-    [messageApi, removeSessionKnowledgeFile, sessionId],
+    [messageApi, refreshKnowledgeFiles, removeSessionKnowledgeFile, sessionId],
   );
+
+  const handleRefreshKnowledge = useCallback(async () => {
+    const result = await refreshKnowledgeFiles(false);
+    if (!result) return;
+    messageApi.success(
+      `已刷新 ${result.files} 个文件，${result.pending} 个索引中，${result.failed} 个失败`,
+    );
+  }, [messageApi, refreshKnowledgeFiles]);
+
+  const handleRebuildKnowledge = useCallback(async () => {
+    if (!sessionId) return;
+    setRebuildingKnowledge(true);
+    try {
+      await sessionApi.rebuildKnowledge(sessionId);
+      await refreshKnowledgeFiles(true);
+      messageApi.success('已触发知识库重建');
+    } catch (err: any) {
+      messageApi.error(err.message || '重建知识库失败');
+    } finally {
+      setRebuildingKnowledge(false);
+    }
+  }, [messageApi, refreshKnowledgeFiles, sessionId]);
+
+  const handleCheckKnowledgeConsistency = useCallback(async () => {
+    if (!sessionId) return;
+    setCheckingKnowledge(true);
+    try {
+      const result = await sessionApi.checkKnowledgeConsistency(sessionId);
+      if (result.ok) {
+        messageApi.success('知识库一致性检查通过');
+      } else {
+        messageApi.warning(
+          result.issues?.length
+            ? `发现 ${result.issues.length} 个问题：${result.issues.join('；')}`
+            : '知识库一致性检查发现问题',
+        );
+      }
+    } catch (err: any) {
+      messageApi.error(err.message || '检查知识库一致性失败');
+    } finally {
+      setCheckingKnowledge(false);
+    }
+  }, [messageApi, sessionId]);
 
   const handlePreviewKnowledge = useCallback(
     async (fileId: string, fileName: string) => {
@@ -325,17 +481,55 @@ export default function ChatDetail() {
               </div>
               <div className="chat-detail-page__knowledge-hint">
                 支持 PDF、Markdown、TXT、DOCX，单文件不超过 10MB
+                {pendingKnowledgeFiles.length > 0 && (
+                <span className="chat-detail-page__knowledge-pending-hint">
+                    {' '}
+                    · {pendingKnowledgeFiles.length} 个文件正在索引中，系统会自动刷新状态
+                    {failedKnowledgeFiles.length > 0
+                      ? `，${failedKnowledgeFiles.length} 个文件索引失败`
+                      : ''}
+                </span>
+                )}
               </div>
             </div>
-            <button
-              type="button"
-              className="chat-detail-page__upload"
-              disabled={saving || uploading}
-              onClick={() => knowledgeInputRef.current?.click()}
-            >
-              <Upload size={16} />
-              {uploading ? '上传中...' : '上传文件'}
-            </button>
+            <div className="chat-detail-page__knowledge-actions">
+              <button
+                type="button"
+                className="chat-detail-page__refresh"
+                disabled={saving || uploading || refreshingKnowledge}
+                onClick={() => void handleRefreshKnowledge()}
+              >
+                <RefreshCcw size={16} />
+                {refreshingKnowledge ? '刷新中...' : '刷新状态'}
+              </button>
+              <button
+                type="button"
+                className="chat-detail-page__refresh"
+                disabled={saving || uploading || rebuildingKnowledge}
+                onClick={() => void handleRebuildKnowledge()}
+              >
+                <RotateCcw size={16} />
+                {rebuildingKnowledge ? '重建中...' : '重建索引'}
+              </button>
+              <button
+                type="button"
+                className="chat-detail-page__refresh"
+                disabled={saving || uploading || checkingKnowledge}
+                onClick={() => void handleCheckKnowledgeConsistency()}
+              >
+                <ShieldAlert size={16} />
+                {checkingKnowledge ? '检查中...' : '一致性检查'}
+              </button>
+              <button
+                type="button"
+                className="chat-detail-page__upload"
+                disabled={saving || uploading}
+                onClick={() => knowledgeInputRef.current?.click()}
+              >
+                <Upload size={16} />
+                {uploading ? '上传中...' : '上传文件'}
+              </button>
+            </div>
             <input
               ref={knowledgeInputRef}
               type="file"
@@ -353,27 +547,54 @@ export default function ChatDetail() {
           )}
 
           <div className="chat-detail-page__knowledge-list">
-            {(session?.manageConfig?.knowledgeFiles ?? []).length === 0 ? (
+            {knowledgeFiles.length === 0 ? (
               <div className="chat-detail-page__knowledge-empty">
                 暂无知识库文件
               </div>
             ) : (
-              (session?.manageConfig?.knowledgeFiles ?? []).map((file) => (
+              knowledgeFiles.map((file) => (
                 <div key={file.id} className="chat-detail-page__knowledge-item">
-                  <div>
-                    <div className="chat-detail-page__knowledge-name">
-                      {file.name}
+                  <div className="chat-detail-page__knowledge-main">
+                    <div className="chat-detail-page__knowledge-name-row">
+                      <div className="chat-detail-page__knowledge-name">
+                        {file.name}
+                      </div>
+                      <span
+                        className={`chat-detail-page__knowledge-status ${getKnowledgeStatusClass(file.indexStatus)}`}
+                      >
+                        {getKnowledgeStatusLabel(file.indexStatus)}
+                      </span>
                     </div>
                     <div className="chat-detail-page__knowledge-meta">
                       {formatFileSize(file.size)} ·{' '}
                       {new Date(file.uploadedAt).toLocaleString()}
                     </div>
+                    {file.indexStatus === 'failed' && file.indexError && (
+                      <div className="chat-detail-page__knowledge-error">
+                        {file.indexError}
+                      </div>
+                    )}
+                    {file.indexStatus === 'pending' && (
+                      <div className="chat-detail-page__knowledge-error">
+                        索引完成后即可参与检索。
+                      </div>
+                    )}
+                    {file.indexStatus === 'ready' && (
+                      <div className="chat-detail-page__knowledge-ready">
+                        可用于聊天和公开会话召回。
+                      </div>
+                    )}
                   </div>
                   <div className="chat-detail-page__knowledge-actions">
                     <button
                       type="button"
                       className="chat-detail-page__preview"
-                      disabled={saving || uploading || previewLoading}
+                      disabled={
+                        saving ||
+                        uploading ||
+                        previewLoading ||
+                        (file.indexStatus ?? 'ready') !== 'ready'
+                      }
                       onClick={() =>
                         void handlePreviewKnowledge(file.id, file.name)
                       }

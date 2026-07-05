@@ -102,6 +102,8 @@ const ChatPanel = memo(function ChatPanel({
   onOpenSessions,
 }: ChatPanelProps) {
   const { sessionId } = useParams();
+  const createSession = useChatStore((s) => s.createSession);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
 
   const session = useChatStore((s) =>
     s.sessions.find((sess) => sess.id === sessionId),
@@ -222,25 +224,49 @@ const ChatPanel = memo(function ChatPanel({
     onSendingChange?.(isLoading && sessionId ? sessionId : null);
   }, [isLoading, onSendingChange, sessionId]);
 
-  const submit = useCallback(() => {
-    if (!sessionId || isLoading || !inputValue.trim()) return;
-    void send(inputValue, (state) => setStreamingMsg(state));
+  const submit = useCallback(async () => {
+    const text = inputValue.trim();
+    if (!text || isLoading || isCreatingSession) return;
+
+    let targetSessionId = sessionId;
+    if (!targetSessionId) {
+      setIsCreatingSession(true);
+      try {
+        targetSessionId = await createSession();
+        if (!targetSessionId) return;
+      } finally {
+        setIsCreatingSession(false);
+      }
+    }
+
+    if (!targetSessionId) return;
     setInputValue('');
-  }, [inputValue, isLoading, send, sessionId]);
+    await send(text, (state) => setStreamingMsg(state));
+  }, [
+    createSession,
+    inputValue,
+    isCreatingSession,
+    isLoading,
+    send,
+    sessionId,
+  ]);
 
   const onSubmit = useCallback(
     (e: React.SyntheticEvent<HTMLFormElement>) => {
       e.preventDefault();
-      submit();
+      void submit();
     },
     [submit],
   );
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      const nativeEvent = e.nativeEvent as KeyboardEvent<HTMLTextAreaElement>['nativeEvent'] & {
+        isComposing?: boolean;
+      };
+      if (e.key === 'Enter' && !e.shiftKey && !nativeEvent.isComposing) {
         e.preventDefault();
-        submit();
+        void submit();
       }
     },
     [submit],
@@ -330,22 +356,28 @@ const ChatPanel = memo(function ChatPanel({
             rows={1}
             placeholder="输入消息，Enter 发送，Shift+Enter 换行"
             value={inputValue}
-            disabled={isLoading || !sessionId}
+            disabled={isLoading || isCreatingSession}
             onChange={(e) => {
+              const val = e.target.value;
+              setInputValue(val);
               if (sessionId) {
-                const val = e.target.value;
-                setInputValue(val);
                 chatActions.updateDraft(sessionId, val);
-                e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
               }
+              e.target.style.height = 'auto';
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+            }}
+            onCompositionStart={(e) => {
+              e.currentTarget.dataset.composing = 'true';
+            }}
+            onCompositionEnd={(e) => {
+              e.currentTarget.dataset.composing = 'false';
             }}
             onKeyDown={onKeyDown}
           />
           <button
             type="submit"
             className="chat__send"
-            disabled={!inputValue.trim() || isLoading || !sessionId}
+            disabled={!inputValue.trim() || isLoading || isCreatingSession}
           >
             <Send size={20} />
           </button>

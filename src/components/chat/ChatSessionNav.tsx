@@ -27,7 +27,7 @@ const SessionList = memo(function SessionList({
   sessions,
   sendingSessionId,
   onMobileClose,
-  onRemove,
+  onRemove
 }: SessionListProps) {
   const listRenderStart = performance.now();
   if (typeof window !== 'undefined') {
@@ -62,7 +62,7 @@ const SessionList = memo(function SessionList({
             {sessions.length > 1 && (
               <button
                 type="button"
-                className="session-nav__delete"
+                className="session-nav__delete flex justify-center items-center"
                 title="删除会话"
                 onClick={(e) => onRemove(e, session.id)}
               >
@@ -167,7 +167,7 @@ function ChatSessionNav({
           <div className="session-nav__mobile-brand">EverPay</div>
           <button
             type="button"
-            className="session-nav__mobile-close"
+            className="session-nav__mobile-close flex justify-center items-center"
             onClick={onMobileClose}
             aria-label="关闭会话列表"
           >

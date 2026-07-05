@@ -28,10 +28,10 @@ export default function App() {
   );
 
   return (
-    <div className="app">
+    <div className="app min-h-screen flex flex-col overflow-auto">
       <nav className={`nav${isMobileChatRoute ? ' nav--chat-mobile' : ''}`}>
         <div className="nav__left">
-          <span className="nav__brand">EverPay AI Review</span>
+          <span className="nav__brand">AI 知识库</span>
           <NavLink
             to="/"
             end
@@ -68,7 +68,7 @@ export default function App() {
       <main
         className={`app__main${isMobileChatRoute ? ' app__main--chat-mobile' : ''}`}
       >
-        <Suspense fallback={<div className="app__loading">加载中...</div>}>
+        <Suspense fallback={<div className="app__loading w-full h-full flex items-center justify-center">加载中...</div>}>
           {routeContent}
         </Suspense>
       </main>

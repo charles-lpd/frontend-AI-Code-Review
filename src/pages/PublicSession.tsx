@@ -7,180 +7,20 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { Empty, message } from 'antd';
-import { Bot, PanelLeft, Send, Square, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import {
+  Bot,
+  RefreshCcw,
+  Send,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import MessageItem from '../components/chat/MessageItem/MessageItem';
 import { sendPublicChatStream } from '../api/index';
 import { sessionApi } from '../api/sessions';
+import { useChatStore } from '../store/useChatStore';
 import type { PublicChatMessage, PublicSessionInfo } from '../types/chat';
 import './PublicSession.css';
-
-const storageKey = (sessionId: string) => `public-session-chat-${sessionId}`;
-const publicSessionListKey = 'public-session-history';
-const PUBLIC_DESKTOP_NAV_COLLAPSED_KEY = 'public.chat.desktopNavCollapsed';
-const PUBLIC_MOBILE_NAV_OPEN_KEY = 'public.chat.mobileNavOpen';
-const DESKTOP_MEDIA_QUERY = '(min-width: 1025px)';
-
-type PublicSessionHistoryItem = {
-  sessionId: string;
-  title: string;
-  lastActiveAt: number;
-  sessionInfo?: PublicSessionInfo;
-};
-
-function readStoredBoolean(key: string, fallback = false) {
-  if (typeof window === 'undefined') return fallback;
-  const value = window.localStorage.getItem(key);
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return fallback;
-}
-
-function readPublicSessionHistory(): PublicSessionHistoryItem[] {
-  if (typeof window === 'undefined') return [];
-  const raw = window.localStorage.getItem(publicSessionListKey);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw) as PublicSessionHistoryItem[];
-    return Array.isArray(parsed)
-      ? parsed
-          .filter((item) => item?.sessionId)
-          .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
-      : [];
-  } catch {
-    window.localStorage.removeItem(publicSessionListKey);
-    return [];
-  }
-}
-
-function writePublicSessionHistory(items: PublicSessionHistoryItem[]) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(publicSessionListKey, JSON.stringify(items));
-}
-
-function touchPublicSessionHistory(item: PublicSessionHistoryItem) {
-  const next = readPublicSessionHistory().filter(
-    (historyItem) => historyItem.sessionId !== item.sessionId,
-  );
-  next.unshift(item);
-  const sorted = next.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
-  writePublicSessionHistory(sorted);
-  return sorted;
-}
-
-function parseSseChunk(chunk: string) {
-  return chunk
-    .split('\n\n')
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .map((block) => {
-      if (block === ': ping') return { type: 'ping' as const };
-      const line = block
-        .split('\n')
-        .find((item) => item.startsWith('data:'))
-        ?.replace(/^data:\s*/, '');
-      if (!line) return null;
-      if (line === '[DONE]') return { type: 'done' as const };
-      try {
-        return { type: 'data' as const, payload: JSON.parse(line) };
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-}
-
-function formatRelativeTime(timestamp: number) {
-  const diff = Date.now() - timestamp;
-  const minute = 60 * 1000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-
-  if (diff < minute) return '刚刚';
-  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`;
-  if (diff < day) return `${Math.floor(diff / hour)} 小时前`;
-  return `${Math.floor(diff / day)} 天前`;
-}
-
-interface PublicSessionNavProps {
-  sessions: PublicSessionHistoryItem[];
-  currentSessionId: string;
-  mobileOpen: boolean;
-  desktopCollapsed: boolean;
-  onDesktopToggle: () => void;
-  onMobileClose: () => void;
-}
-
-function PublicSessionNav({
-  sessions,
-  currentSessionId,
-  mobileOpen,
-  desktopCollapsed,
-  onDesktopToggle,
-  onMobileClose,
-}: PublicSessionNavProps) {
-  return (
-    <>
-      {mobileOpen && (
-        <button
-          type="button"
-          className="session-nav__overlay"
-          aria-label="关闭公开会话列表遮罩"
-          onClick={onMobileClose}
-        />
-      )}
-
-      <aside
-        className={`session-nav${mobileOpen ? ' session-nav--mobile-open' : ''}${desktopCollapsed ? ' session-nav--desktop-collapsed' : ''}`}
-      >
-        <div className="session-nav__desktop-header">
-          <button
-            type="button"
-            className="session-nav__desktop-toggle"
-            onClick={onDesktopToggle}
-            aria-label={desktopCollapsed ? '展开侧边栏' : '收起侧边栏'}
-          >
-            <PanelLeft size={18} />
-          </button>
-        </div>
-
-        <div className="session-nav__mobile-header">
-          <div className="session-nav__mobile-brand">公开会话</div>
-          <button
-            type="button"
-            className="session-nav__mobile-close"
-            onClick={onMobileClose}
-            aria-label="关闭公开会话列表"
-          >
-            ×
-          </button>
-        </div>
-
-        <ul className="session-nav__list">
-          {sessions.length === 0 ? (
-            <li className="public-session-page__nav-empty">暂无公开会话记录</li>
-          ) : (
-            sessions.map((session) => (
-              <li key={session.sessionId}>
-                <Link
-                  to={`/public/session/${session.sessionId}`}
-                  className={`session-nav__item${currentSessionId === session.sessionId ? ' session-nav__item--active' : ''}`}
-                  onClick={onMobileClose}
-                >
-                  <span className="session-nav__title">{session.title}</span>
-                  <span className="session-nav__badge">
-                    {formatRelativeTime(session.lastActiveAt)}
-                  </span>
-                </Link>
-              </li>
-            ))
-          )}
-        </ul>
-      </aside>
-    </>
-  );
-}
 
 export default function PublicSession() {
   const { id } = useParams();
@@ -189,141 +29,45 @@ export default function PublicSession() {
   const [sessionInfo, setSessionInfo] = useState<PublicSessionInfo | null>(
     null,
   );
-  const [historySessions, setHistorySessions] = useState<
-    PublicSessionHistoryItem[]
-  >([]);
   const [warning, setWarning] = useState<string | null>(null);
   const [messages, setMessages] = useState<PublicChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [streamError, setStreamError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mobileNavOpen, setMobileNavOpen] = useState(() =>
-    readStoredBoolean(PUBLIC_MOBILE_NAV_OPEN_KEY),
-  );
-  const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(() =>
-    readStoredBoolean(PUBLIC_DESKTOP_NAV_COLLAPSED_KEY),
-  );
-  const [sidebarTransitionEnabled, setSidebarTransitionEnabled] =
-    useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [refreshingKnowledge, setRefreshingKnowledge] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  useEffect(() => {
-    setHistorySessions(readPublicSessionHistory());
-  }, []);
+  const publicSessionCache = useChatStore((s) => s.publicSessionCache);
+  const setPublicSessionCache = useChatStore(
+    (s) => s.setPublicSessionCache,
+  );
+  const clearPublicSessionCache = useChatStore(
+    (s) => s.clearPublicSessionCache,
+  );
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(
-      PUBLIC_MOBILE_NAV_OPEN_KEY,
-      String(mobileNavOpen),
-    );
-  }, [mobileNavOpen]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(
-      PUBLIC_DESKTOP_NAV_COLLAPSED_KEY,
-      String(desktopNavCollapsed),
-    );
-  }, [desktopNavCollapsed]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    let frameId = window.requestAnimationFrame(() => {
-      setSidebarTransitionEnabled(true);
-    });
-
-    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
-    const handleChange = (event: MediaQueryListEvent) => {
-      setSidebarTransitionEnabled(false);
-      setMobileNavOpen(false);
-      if (!event.matches) {
-        setDesktopNavCollapsed(
-          readStoredBoolean(PUBLIC_DESKTOP_NAV_COLLAPSED_KEY),
-        );
-      }
-      frameId = window.requestAnimationFrame(() => {
-        setSidebarTransitionEnabled(true);
-      });
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      mediaQuery.removeEventListener('change', handleChange);
-    };
-  }, []);
+  const cachedSession = publicSessionCache[sessionId];
 
   useEffect(() => {
     if (!sessionId) return;
-    const raw = window.localStorage.getItem(storageKey(sessionId));
-    if (!raw) {
+    if (!cachedSession) {
       setMessages([]);
+      setSessionInfo(null);
+      setWarning(null);
       return;
     }
-    try {
-      const parsed = JSON.parse(raw) as PublicChatMessage[];
-      setMessages(parsed);
-    } catch {
-      window.localStorage.removeItem(storageKey(sessionId));
-      setMessages([]);
-    }
-  }, [sessionId]);
+
+    setMessages(cachedSession.messages ?? []);
+    setSessionInfo(cachedSession.sessionInfo ?? null);
+    setWarning(cachedSession.sessionInfo?.warning ?? null);
+  }, [cachedSession, sessionId]);
 
   useEffect(() => {
     if (!sessionId) return;
-    window.localStorage.setItem(
-      storageKey(sessionId),
-      JSON.stringify(messages),
-    );
-  }, [messages, sessionId]);
-
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, isStreaming]);
-
-  useEffect(() => {
-    if (!sessionId) return;
-
-    const cachedSession = readPublicSessionHistory().find(
-      (item) => item.sessionId === sessionId,
-    );
-
-    if (cachedSession?.sessionInfo) {
-      setSessionInfo(cachedSession.sessionInfo);
-      setWarning(cachedSession.sessionInfo.warning);
-      setLoading(false);
-    }
 
     const load = async () => {
-      if (cachedSession?.sessionInfo) {
-        queueMicrotask(async () => {
-          try {
-            const detail = await sessionApi.getPublicDetail(sessionId);
-            const nextDetail = {
-              ...detail,
-              cachedAt: Date.now(),
-            };
-            setSessionInfo(nextDetail);
-            setWarning(nextDetail.warning);
-            setHistorySessions(
-              touchPublicSessionHistory({
-                sessionId: nextDetail.id,
-                title: nextDetail.title,
-                lastActiveAt: Date.now(),
-                sessionInfo: nextDetail,
-              }),
-            );
-          } catch {}
-        });
-        return;
-      }
-
       setLoading(true);
       setStreamError(null);
       try {
@@ -334,14 +78,11 @@ export default function PublicSession() {
         };
         setSessionInfo(nextDetail);
         setWarning(nextDetail.warning);
-        setHistorySessions(
-          touchPublicSessionHistory({
-            sessionId: nextDetail.id,
-            title: nextDetail.title,
-            lastActiveAt: Date.now(),
-            sessionInfo: nextDetail,
-          }),
-        );
+        setPublicSessionCache(sessionId, {
+          sessionInfo: nextDetail,
+          messages: cachedSession?.messages ?? [],
+          lastActiveAt: Date.now(),
+        });
       } catch (err: any) {
         setSessionInfo(null);
         setStreamError(err.message || '公开会话加载失败');
@@ -349,25 +90,49 @@ export default function PublicSession() {
         setLoading(false);
       }
     };
-    void load();
-  }, [sessionId]);
 
-  const persistMessages = useCallback(
-    (next: PublicChatMessage[], lastActiveAt = Date.now()) => {
-      setMessages(next);
-      window.localStorage.setItem(storageKey(sessionId), JSON.stringify(next));
-      if (sessionInfo) {
-        setHistorySessions(
-          touchPublicSessionHistory({
-            sessionId,
-            title: sessionInfo.title,
-            lastActiveAt,
-            sessionInfo,
-          }),
-        );
+    void load();
+  }, [cachedSession?.messages, sessionId, setPublicSessionCache]);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [messages.length, isStreaming]);
+
+  useEffect(() => {
+    if (isStreaming) return;
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+  }, [inputValue, isStreaming]);
+
+  const refreshPublicSession = useCallback(
+    async (silent = false) => {
+      if (!sessionId) return;
+      if (!silent) setRefreshingKnowledge(true);
+      try {
+        const detail = await sessionApi.getPublicDetail(sessionId);
+        const nextDetail = {
+          ...detail,
+          cachedAt: Date.now(),
+        };
+        setSessionInfo(nextDetail);
+        setWarning(nextDetail.warning);
+        setPublicSessionCache(sessionId, {
+          sessionInfo: nextDetail,
+          messages,
+          lastActiveAt: Date.now(),
+        });
+      } catch (err: any) {
+        if (!silent) {
+          messageApi.error(err.message || '刷新公开会话失败');
+        }
+      } finally {
+        if (!silent) setRefreshingKnowledge(false);
       }
     },
-    [sessionId, sessionInfo],
+    [messageApi, messages, sessionId, setPublicSessionCache],
   );
 
   const handleSend = useCallback(async () => {
@@ -391,11 +156,15 @@ export default function PublicSession() {
     };
 
     const nextMessages = [...messages, userMessage, assistantMessage];
-    persistMessages(nextMessages, now);
+    setMessages(nextMessages);
     setInputValue('');
     setIsStreaming(true);
     setStreamError(null);
-    setMobileNavOpen(false);
+    setPublicSessionCache(sessionId, {
+      sessionInfo: sessionInfo ?? undefined,
+      messages: nextMessages,
+      lastActiveAt: Date.now(),
+    });
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -419,22 +188,25 @@ export default function PublicSession() {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const chunks = parseSseChunk(buffer);
+        const chunks = buffer
+          .split('\n\n')
+          .map((block) => block.trim())
+          .filter(Boolean);
         const consumed = buffer.lastIndexOf('\n\n');
         if (consumed >= 0) {
           buffer = buffer.slice(consumed + 2);
         }
 
         chunks.forEach((chunk) => {
-          if (!chunk || chunk.type !== 'data') return;
-          const payload = chunk.payload as {
+          if (!chunk.startsWith('data:')) return;
+          const data = chunk.replace(/^data:\s*/, '');
+          if (data === '[DONE]') return;
+          const payload = JSON.parse(data) as {
             text?: string;
             warning?: string;
             error?: string;
           };
-          if (payload.error) {
-            throw new Error(payload.error);
-          }
+          if (payload.error) throw new Error(payload.error);
           if (payload.warning) {
             finalWarning = payload.warning;
             setWarning(payload.warning);
@@ -448,40 +220,46 @@ export default function PublicSession() {
                       ...item,
                       content: finalText,
                       warning: finalWarning ?? undefined,
-                      status: 'streaming',
+                      status: 'streaming' as const,
                     }
                   : item,
               ),
             );
+            const updatedMessages = nextMessages.map((item) =>
+              item.id === assistantId
+                ? {
+                    ...item,
+                    content: finalText,
+                    warning: finalWarning ?? undefined,
+                    status: 'streaming' as const,
+                  }
+                : item,
+            );
+            setPublicSessionCache(sessionId, {
+              sessionInfo: sessionInfo ?? undefined,
+              messages: updatedMessages,
+              lastActiveAt: Date.now(),
+            });
           }
         });
       }
 
       setMessages((prev) => {
-        const doneMessages: PublicChatMessage[] = prev.map((item) =>
+        const doneMessages = prev.map((item) =>
           item.id === assistantId
-            ? {
-                ...item,
-                content: finalText,
-                warning: finalWarning ?? undefined,
-                status: 'done',
-              }
-            : item,
+              ? {
+                  ...item,
+                  content: finalText,
+                  warning: finalWarning ?? undefined,
+                  status: 'done' as const,
+                }
+              : item,
         );
-        window.localStorage.setItem(
-          storageKey(sessionId),
-          JSON.stringify(doneMessages),
-        );
-        if (sessionInfo) {
-          setHistorySessions(
-            touchPublicSessionHistory({
-              sessionId,
-              title: sessionInfo.title,
-              lastActiveAt: Date.now(),
-              sessionInfo,
-            }),
-          );
-        }
+        setPublicSessionCache(sessionId, {
+          sessionInfo: sessionInfo ?? undefined,
+          messages: doneMessages,
+          lastActiveAt: Date.now(),
+        });
         return doneMessages;
       });
     } catch (err: any) {
@@ -501,32 +279,20 @@ export default function PublicSession() {
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [
-    inputValue,
-    isStreaming,
-    messageApi,
-    messages,
-    persistMessages,
-    sessionId,
-    sessionInfo,
-  ]);
+  }, [inputValue, isStreaming, messageApi, messages, sessionId, sessionInfo, setPublicSessionCache]);
 
-  const clearLocalMessages = useCallback(() => {
-    persistMessages([]);
-    messageApi.success('本地聊天记录已清空');
-  }, [messageApi, persistMessages]);
-
-  const handleDesktopToggle = useCallback(() => {
-    setDesktopNavCollapsed((prev) => !prev);
-  }, []);
-
-  const handleMobileOpen = useCallback(() => {
-    setMobileNavOpen(true);
-  }, []);
-
-  const handleMobileClose = useCallback(() => {
-    setMobileNavOpen(false);
-  }, []);
+  const onKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      const nativeEvent = event.nativeEvent as KeyboardEvent<HTMLTextAreaElement>['nativeEvent'] & {
+        isComposing?: boolean;
+      };
+      if (event.key === 'Enter' && !event.shiftKey && !nativeEvent.isComposing) {
+        event.preventDefault();
+        void handleSend();
+      }
+    },
+    [handleSend],
+  );
 
   const canSend = inputValue.trim().length > 0 && !isStreaming && !warning;
   const headerTitle = sessionInfo?.title ?? '公开客服';
@@ -550,87 +316,84 @@ export default function PublicSession() {
   }
 
   return (
-    <div
-      className={`home public-session-shell${mobileNavOpen ? ' home--mobile-nav-open' : ''}${desktopNavCollapsed ? ' home--desktop-nav-collapsed' : ''}${sidebarTransitionEnabled ? ' home--sidebar-transition-enabled' : ''}`}
-    >
+    <div className="public-session-page">
       {contextHolder}
-      <PublicSessionNav
-        sessions={historySessions}
-        currentSessionId={sessionId}
-        mobileOpen={mobileNavOpen}
-        desktopCollapsed={desktopNavCollapsed}
-        onDesktopToggle={handleDesktopToggle}
-        onMobileClose={handleMobileClose}
-      />
+      <div className="public-session-page__header">
+        <div className="public-session-page__header-main">
+          <h1>公开会话</h1>
+          <Link to="/" className="public-session-page__link">
+            返回对话
+          </Link>
+        </div>
+      </div>
 
-      <div className="chat public-session-page__chat">
-        <header className="chat__header chat__header--column">
-          <div className="chat__header-top">
-            <div className="chat__header-main">
-              <button
-                type="button"
-                className="chat__sessions-toggle"
-                onClick={handleMobileOpen}
-                aria-label="展开公开会话列表"
-              >
-                <PanelLeft size={18} />
-              </button>
-              <div className="chat__header-info">
-                <h1 className="chat__title">{headerTitle}</h1>
-                <span className="chat__status">
-                  {warning
-                    ? '配置提醒'
-                    : isStreaming
-                      ? '助手正在思考...'
-                      : '在线'}
-                </span>
-              </div>
+      <div className="public-session-page__card">
+        <div className="public-session-page__card-head">
+          <div>
+            <div className="public-session-page__title-row">
+              <h2 className="public-session-page__title">{headerTitle}</h2>
+              <span className="public-session-page__status">
+                {warning
+                  ? '配置提醒'
+                  : isStreaming
+                    ? '助手正在思考...'
+                    : '在线'}
+              </span>
             </div>
-            <div className="chat__header-actions">
-              <button
-                type="button"
-                className="chat__clear"
-                onClick={clearLocalMessages}
-              >
-                <Trash2 size={18} />
-                <span>清空</span>
-              </button>
+            <div className="public-session-page__subtitle">
+              公开会话聊天记录与最近访问记录会缓存到本地 sessionStore。
             </div>
           </div>
-          {warning && (
-            <div
-              className="chat__error public-session-page__inline-warning"
-              role="alert"
+          <div className="public-session-page__actions">
+            <button
+              type="button"
+              className="public-session-page__action"
+              onClick={() => void refreshPublicSession()}
+              disabled={refreshingKnowledge}
             >
-              <span>{warning}</span>
-            </div>
-          )}
-          {streamError && (
-            <div className="chat__error" role="alert">
-              <span>{streamError}</span>
-              <button type="button" onClick={() => setStreamError(null)}>
-                关闭
-              </button>
-            </div>
-          )}
-        </header>
+              <RefreshCcw size={16} />
+              {refreshingKnowledge ? '刷新中...' : '刷新状态'}
+            </button>
+            <button
+              type="button"
+              className="public-session-page__action public-session-page__action--danger"
+              onClick={() => {
+                if (
+                  window.confirm('确定要清空当前公开会话的本地聊天记录吗？')
+                ) {
+                  setMessages([]);
+                  clearPublicSessionCache(sessionId);
+                }
+              }}
+            >
+              <Trash2 size={16} />
+              清空
+            </button>
+          </div>
+        </div>
 
-        <div className="chat__messages" ref={listRef}>
+        {warning && (
+          <div className="public-session-page__warning" role="alert">
+            <span>{warning}</span>
+          </div>
+        )}
+
+        <div className="public-session-page__messages" ref={listRef}>
           {messagesHistory.length === 0 ? (
-            <div className="chat__empty">
-              <Bot size={48} className="chat__empty-icon" />
+            <div className="public-session-page__empty">
+              <Bot size={48} className="public-session-page__empty-icon" />
               <h2>有什么我可以帮你的吗？</h2>
-              <p>发送消息开始公开问答，聊天记录仅保存在当前浏览器。</p>
+              <p>发送消息开始公开问答，聊天记录会缓存到 sessionStore。</p>
             </div>
           ) : (
             messagesHistory.map((item) => (
               <div
-                className="message-container"
+                className="public-session-page__message"
                 key={item.id ?? `${item.role}-${item.createdAt}`}
               >
                 {item.warning && (
                   <div
-                    className="chat__error public-session-page__message-alert"
+                    className="public-session-page__message-warning"
                     role="alert"
                   >
                     <span>系统提醒：{item.warning}</span>
@@ -638,20 +401,28 @@ export default function PublicSession() {
                 )}
                 <MessageItem
                   role={item.role}
-                  content={
-                    item.content || (item.status === 'streaming' ? '...' : '')
-                  }
+                  content={item.content || (item.status === 'streaming' ? '...' : '')}
                 />
               </div>
             ))
           )}
         </div>
 
-        <div className="chat__footer">
-          <div className="chat__controls">
+        {streamError && (
+          <div className="public-session-page__error" role="alert">
+            <span>{streamError}</span>
+            <button type="button" onClick={() => setStreamError(null)}>
+              关闭
+            </button>
+          </div>
+        )}
+
+        <div className="public-session-page__footer">
+          <div className="public-session-page__controls">
             {isStreaming && (
               <button
-                className="chat__stop"
+                type="button"
+                className="public-session-page__stop"
                 onClick={() => abortRef.current?.abort()}
               >
                 <Square size={14} fill="currentColor" />
@@ -660,14 +431,15 @@ export default function PublicSession() {
             )}
           </div>
           <form
-            className="chat__form"
+            className="public-session-page__form"
             onSubmit={(event) => {
               event.preventDefault();
               void handleSend();
             }}
           >
             <textarea
-              className="chat__input"
+              ref={inputRef}
+              className="public-session-page__input"
               rows={1}
               placeholder={
                 warning
@@ -680,21 +452,31 @@ export default function PublicSession() {
                 const value = event.target.value;
                 setInputValue(value);
                 event.target.style.height = 'auto';
-                event.target.style.height = `${Math.min(event.target.scrollHeight, 200)}px`;
+                event.target.style.height = `${Math.min(
+                  event.target.scrollHeight,
+                  200,
+                )}px`;
               }}
-              onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSend();
-                }
+              onCompositionStart={(event) => {
+                event.currentTarget.dataset.composing = 'true';
               }}
+              onCompositionEnd={(event) => {
+                event.currentTarget.dataset.composing = 'false';
+                event.currentTarget.style.height = 'auto';
+                event.currentTarget.style.height = `${Math.min(
+                  event.currentTarget.scrollHeight,
+                  200,
+                )}px`;
+              }}
+              onKeyDown={onKeyDown}
             />
-            <button type="submit" className="chat__send" disabled={!canSend}>
+            <button type="submit" className="public-session-page__send" disabled={!canSend}>
               <Send size={20} />
             </button>
           </form>
         </div>
       </div>
+
     </div>
   );
 }

@@ -7,6 +7,9 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
   ChatMessage,
   ChatSession,
+  PublicSessionCacheItem,
+  PublicSessionHistoryItem,
+  SessionKnowledgeFile,
   SessionManageConfig,
 } from '../types/chat';
 import { sessionApi } from '../api/sessions';
@@ -17,6 +20,8 @@ interface ChatStore {
   isLoading: boolean;
   hasFetched: boolean;
   error: string | null;
+  publicSessionHistory: PublicSessionHistoryItem[];
+  publicSessionCache: Record<string, PublicSessionCacheItem>;
 
   fetchSessions: (force?: boolean) => Promise<void>;
   fetchSessionDetail: (id: string, limit?: number) => Promise<void>;
@@ -29,6 +34,10 @@ interface ChatStore {
     patch: Partial<SessionManageConfig>,
   ) => Promise<void>;
   addSessionKnowledgeFiles: (sessionId: string, files: File[]) => Promise<void>;
+  syncSessionKnowledgeFiles: (
+    sessionId: string,
+    files: SessionKnowledgeFile[],
+  ) => void;
   removeSessionKnowledgeFile: (
     sessionId: string,
     fileId: string,
@@ -43,6 +52,14 @@ interface ChatStore {
   updateDraft: (sessionId: string, draft: string) => void;
   clearMessages: (sessionId: string) => void;
   getActiveSession: () => ChatSession | undefined;
+  setPublicSessionHistory: (items: PublicSessionHistoryItem[]) => void;
+  touchPublicSessionHistory: (item: PublicSessionHistoryItem) => void;
+  clearPublicSessionHistory: () => void;
+  setPublicSessionCache: (
+    sessionId: string,
+    cache: PublicSessionCacheItem,
+  ) => void;
+  clearPublicSessionCache: (sessionId: string) => void;
 }
 
 function getDefaultManageConfig() {
@@ -61,6 +78,8 @@ export const useChatStore = create<ChatStore>()(
       isLoading: false,
       hasFetched: false,
       error: null,
+      publicSessionHistory: [],
+      publicSessionCache: {},
 
       fetchSessions: async (force = false) => {
         const { sessions } = get();
@@ -334,6 +353,23 @@ export const useChatStore = create<ChatStore>()(
         }));
       },
 
+      syncSessionKnowledgeFiles: (sessionId, files) => {
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === sessionId
+              ? {
+                  ...s,
+                  manageConfig: {
+                    ...getDefaultManageConfig(),
+                    ...s.manageConfig,
+                    knowledgeFiles: files,
+                  },
+                }
+              : s,
+          ),
+        }));
+      },
+
       removeSessionKnowledgeFile: async (sessionId, fileId) => {
         await sessionApi.deleteKnowledge(sessionId, fileId);
         set((state) => ({
@@ -399,6 +435,41 @@ export const useChatStore = create<ChatStore>()(
         const { sessions, activeSessionId } = get();
         return sessions.find((s) => s.id === activeSessionId);
       },
+
+      setPublicSessionHistory: (items) => {
+        set({ publicSessionHistory: items });
+      },
+
+      touchPublicSessionHistory: (item) => {
+        set((state) => {
+          const next = state.publicSessionHistory.filter(
+            (historyItem) => historyItem.sessionId !== item.sessionId,
+          );
+          next.unshift(item);
+          return { publicSessionHistory: next };
+        });
+      },
+
+      clearPublicSessionHistory: () => {
+        set({ publicSessionHistory: [] });
+      },
+
+      setPublicSessionCache: (sessionId, cache) => {
+        set((state) => ({
+          publicSessionCache: {
+            ...state.publicSessionCache,
+            [sessionId]: cache,
+          },
+        }));
+      },
+
+      clearPublicSessionCache: (sessionId) => {
+        set((state) => {
+          const next = { ...state.publicSessionCache };
+          delete next[sessionId];
+          return { publicSessionCache: next };
+        });
+      },
     }),
     {
       name: 'everpay-chat-storage',
@@ -416,6 +487,8 @@ export const useChatStore = create<ChatStore>()(
           manageConfig: s.manageConfig,
         })),
         activeSessionId: state.activeSessionId,
+        publicSessionHistory: state.publicSessionHistory,
+        publicSessionCache: state.publicSessionCache,
       }),
     },
   ),

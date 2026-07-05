@@ -2,9 +2,11 @@
   display: flex;
   flex-direction: row;
   width: 100%;
-  height: 100%;
+  /* height: 100%; */
   min-height: 0;
-  background: #0a0e17;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(248, 250, 252, 0.9)),
+    radial-gradient(circle at top, rgba(16, 163, 127, 0.06), transparent 34%);
 }
 
 .home > :last-child {
@@ -13,21 +15,17 @@
   min-width: 0;
 }
 
-.home--desktop-nav-collapsed {
-  background: #0a0e17;
-}
-
 @media (max-width: 480px) {
   .home {
     position: relative;
-    background: #ffffff;
+    background: #f8fafc;
   }
 
   .home--mobile-nav-open::before {
     content: '';
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.18);
+    background: rgba(15, 23, 42, 0.22);
     z-index: 50;
   }
 }

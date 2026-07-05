@@ -22,8 +22,10 @@ export function useChatSend(sessionId: string | undefined) {
     async (
       content: string,
       onChange: (state: StreamingAssistantState | null) => void,
+      targetSessionId?: string,
     ) => {
-      if (!sessionId) return;
+      const activeSessionId = targetSessionId ?? sessionId;
+      if (!activeSessionId) return;
 
       const text = content.trim();
       if (!text || isLoading) return;
@@ -35,7 +37,12 @@ export function useChatSend(sessionId: string | undefined) {
       abortControllerRef.current = controller;
 
       try {
-        await sendChatMessage(sessionId, text, onChange, controller.signal);
+        await sendChatMessage(
+          activeSessionId,
+          text,
+          onChange,
+          controller.signal,
+        );
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           // Handled by stop function

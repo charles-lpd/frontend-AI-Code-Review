@@ -10,6 +10,8 @@ export interface SessionKnowledgeFile {
   size: number;
   type: string;
   uploadedAt: number;
+  indexStatus?: 'pending' | 'ready' | 'failed';
+  indexError?: string | null;
 }
 
 export interface SessionManageConfig {
@@ -27,6 +29,19 @@ export interface PublicSessionInfo {
   warning: string | null;
   manageConfig: SessionManageConfig;
   cachedAt?: number;
+}
+
+export interface PublicSessionHistoryItem {
+  sessionId: string;
+  title: string;
+  lastActiveAt: number;
+  sessionInfo?: PublicSessionInfo;
+}
+
+export interface PublicSessionCacheItem {
+  sessionInfo?: PublicSessionInfo;
+  messages: PublicChatMessage[];
+  lastActiveAt: number;
 }
 
 export interface PublicChatMessage {
