@@ -50,7 +50,7 @@ interface ChatStore {
     patch: Partial<ChatMessage>,
   ) => void;
   updateDraft: (sessionId: string, draft: string) => void;
-  clearMessages: (sessionId: string) => void;
+  clearMessages: (sessionId: string) => Promise<void>;
   getActiveSession: () => ChatSession | undefined;
   setPublicSessionHistory: (items: PublicSessionHistoryItem[]) => void;
   touchPublicSessionHistory: (item: PublicSessionHistoryItem) => void;
@@ -423,10 +423,22 @@ export const useChatStore = create<ChatStore>()(
         }));
       },
 
-      clearMessages: (sessionId) => {
+      clearMessages: async (sessionId) => {
+        const clearedSession = await sessionApi.clearMessages(sessionId);
         set((state) => ({
           sessions: state.sessions.map((s) =>
-            s.id === sessionId ? { ...s, messages: [] } : s,
+            s.id === sessionId
+              ? {
+                  ...s,
+                  ...clearedSession,
+                  draft: s.draft,
+                  messages: [],
+                  hasMore: false,
+                  lastCursor: undefined,
+                  isLoadingMore: false,
+                  detailsLoaded: true,
+                }
+              : s,
           ),
         }));
       },

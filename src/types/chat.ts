@@ -51,6 +51,31 @@ export interface PublicChatMessage {
   createdAt?: number;
   status?: 'streaming' | 'done' | 'error';
   warning?: string;
+  metadata?: ChatMessage['metadata'];
+}
+
+export type KnowledgeAgentStepStatus =
+  | 'running'
+  | 'completed'
+  | 'failed';
+
+export interface KnowledgeAgentStep {
+  stepKey: string;
+  stepLabel: string;
+  stepStatus: KnowledgeAgentStepStatus;
+  stepIndex: number;
+  stepTotal: number;
+  seq: number;
+  timestamp: string;
+  durationMs?: number;
+  message?: string;
+}
+
+export interface KnowledgeAgentStreamState {
+  answer: string;
+  steps: Record<string, KnowledgeAgentStep>;
+  status: 'idle' | 'running' | 'completed' | 'failed';
+  error?: string;
 }
 
 /** 工具调用定义 */
@@ -119,6 +144,7 @@ export interface ChatMessage {
     citations?: string[];
     thought?: string; // 思维链
     reviewStream?: ReviewStreamMetadata;
+    knowledgeAgent?: KnowledgeAgentStreamState;
     [key: string]: any;
   };
   createdAt?: number;

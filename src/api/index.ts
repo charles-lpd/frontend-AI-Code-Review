@@ -1,5 +1,10 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
-import { BACKEND_API_BASE_URL } from '../constants';
+import {
+  BACKEND_API_BASE_URL,
+  CHAT_API_PATH,
+  PUBLIC_CHAT_API_PATH,
+  SESSIONS_API_PREFIX,
+} from '../constants';
 import { useAuthStore } from '../store/useAuthStore';
 import type { PublicChatMessage, SessionKnowledgeFile } from '../types/chat';
 
@@ -27,7 +32,7 @@ export const sendChatStream = async (
   signal?: AbortSignal,
 ) => {
   const token = useAuthStore.getState().token;
-  const response = await fetch(`${baseUrl}/chat`, {
+  const response = await fetch(`${baseUrl}${CHAT_API_PATH}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -36,7 +41,6 @@ export const sendChatStream = async (
     body: JSON.stringify({
       sessionId,
       messages,
-      autoComment: false,
     }),
     signal,
   });
@@ -54,7 +58,7 @@ export const sendPublicChatStream = async (
   messages: Pick<PublicChatMessage, 'role' | 'content'>[],
   signal?: AbortSignal,
 ) => {
-  const response = await fetch(`${baseUrl}/public/chat`, {
+  const response = await fetch(`${baseUrl}${PUBLIC_CHAT_API_PATH}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -125,7 +129,7 @@ export const sendRequest = async (
 export const listSessions = async (): Promise<any[]> => {
   const result = await sendRequest({
     method: 'GET',
-    url: `${baseUrl}/sessions`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}`,
   });
   return result.data;
 };
@@ -135,7 +139,7 @@ export const createSQLSession = async (
 ): Promise<{ id: string; title: string }> => {
   const result = await sendRequest({
     method: 'POST',
-    url: `${baseUrl}/sessions`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}`,
     data: {
       title,
     },
@@ -154,7 +158,7 @@ export const getSessionDetail = async (
 
   const result = await sendRequest({
     method: 'GET',
-    url: `${baseUrl}/sessions/${sessionId}${params.toString() ? `?${params.toString()}` : ''}`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}${params.toString() ? `?${params.toString()}` : ''}`,
   });
   return result.data;
 };
@@ -162,8 +166,18 @@ export const getSessionDetail = async (
 export const deleteSession = async (sessionId: string): Promise<void> => {
   await sendRequest({
     method: 'DELETE',
-    url: `${baseUrl}/sessions/${sessionId}`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}`,
   });
+};
+
+export const clearSessionMessages = async (
+  sessionId: string,
+): Promise<any> => {
+  const result = await sendRequest({
+    method: 'POST',
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/clear`,
+  });
+  return result.data;
 };
 
 export const updateSessionManage = async (
@@ -176,7 +190,7 @@ export const updateSessionManage = async (
 ): Promise<any> => {
   const result = await sendRequest({
     method: 'PATCH',
-    url: `${baseUrl}/sessions/${sessionId}/manage`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/manage`,
     data: payload,
   });
   return result.data;
@@ -192,7 +206,7 @@ export const uploadSessionKnowledge = async (
     formData.append('files', file);
   });
 
-  const response = await fetch(`${baseUrl}/sessions/${sessionId}/knowledge`, {
+  const response = await fetch(`${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
@@ -216,7 +230,7 @@ export const getKnowledgeContent = async (
 ): Promise<KnowledgePreviewResult> => {
   const token = useAuthStore.getState().token;
   const response = await fetch(
-    `${baseUrl}/sessions/${sessionId}/knowledge/${fileId}/content`,
+    `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge/${fileId}/content`,
     {
       method: 'GET',
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -270,7 +284,7 @@ export const deleteSessionKnowledge = async (
 ): Promise<{ success: boolean }> => {
   const result = await sendRequest({
     method: 'DELETE',
-    url: `${baseUrl}/sessions/${sessionId}/knowledge/${fileId}`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge/${fileId}`,
   });
   return result.data;
 };
@@ -282,7 +296,7 @@ export const listSessionKnowledge = async (
 }> => {
   const result = await sendRequest({
     method: 'GET',
-    url: `${baseUrl}/sessions/${sessionId}/knowledge`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge`,
   });
   return result.data;
 };
@@ -294,7 +308,7 @@ export const rebuildSessionKnowledge = async (
 }> => {
   const result = await sendRequest({
     method: 'POST',
-    url: `${baseUrl}/sessions/${sessionId}/knowledge/rebuild`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge/rebuild`,
   });
   return result.data;
 };
@@ -307,7 +321,7 @@ export const checkSessionKnowledgeConsistency = async (
 }> => {
   const result = await sendRequest({
     method: 'GET',
-    url: `${baseUrl}/sessions/${sessionId}/knowledge/consistency`,
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge/consistency`,
   });
   return result.data;
 };

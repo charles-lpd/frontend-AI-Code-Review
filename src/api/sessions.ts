@@ -9,6 +9,7 @@ import {
   createSQLSession,
   getSessionDetail,
   deleteSession,
+  clearSessionMessages,
   updateSessionManage,
   uploadSessionKnowledge,
   deleteSessionKnowledge,
@@ -99,6 +100,11 @@ export const sessionApi = {
 
   async delete(id: string): Promise<void> {
     return deleteSession(id);
+  },
+
+  async clearMessages(id: string): Promise<ChatSession> {
+    const session = await clearSessionMessages(id);
+    return normalizeSession(session);
   },
 
   async updateManageConfig(

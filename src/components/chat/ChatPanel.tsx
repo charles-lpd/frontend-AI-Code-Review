@@ -12,13 +12,13 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import { message } from 'antd';
 import { Link, useParams } from 'react-router-dom';
 import { Square, Send, Trash2, Bot, PanelLeft, Settings } from 'lucide-react';
 import { useChatSend } from '../../hooks/useChatSend';
 import { chatActions, useChatStore } from '../../store/useChatStore';
 import type { ChatMessage, StreamingAssistantState } from '../../types/chat';
 import MessageItem from './MessageItem/MessageItem';
-import RepoSelector from './RepoSelector';
 import './ChatPanel.css';
 
 interface ChatMessageView {
@@ -119,6 +119,7 @@ const ChatPanel = memo(function ChatPanel({
   const [streamingMsg, setStreamingMsg] =
     useState<StreamingAssistantState | null>(null);
   const [inputValue, setInputValue] = useState(draft);
+  const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
     setInputValue(draft);
@@ -219,7 +220,9 @@ const ChatPanel = memo(function ChatPanel({
       },
     ];
   }, [messages, streamingMsg]);
-
+  useEffect(()=>{
+    console.log(messagesHistory)
+  },[])
   useEffect(() => {
     onSendingChange?.(isLoading && sessionId ? sessionId : null);
   }, [isLoading, onSendingChange, sessionId]);
@@ -302,10 +305,24 @@ const ChatPanel = memo(function ChatPanel({
             type="button"
             className="chat__clear"
             title="清空对话"
-            disabled={messages.length === 0 || isLoading || !sessionId}
+            disabled={
+              messages.length === 0 || isLoading || !sessionId || isClearing
+            }
             onClick={() => {
               if (window.confirm('确定要清空当前会话的消息吗？')) {
-                sessionId && clearMessages(sessionId);
+                if (!sessionId) return;
+                setIsClearing(true);
+                void clearMessages(sessionId)
+                  .then(() => {
+                    setStreamingMsg(null);
+                    message.success('会话记录已清空');
+                  })
+                  .catch((err: any) => {
+                    message.error(err?.message || '清空会话记录失败');
+                  })
+                  .finally(() => {
+                    setIsClearing(false);
+                  });
               }
             }}
           >
@@ -322,7 +339,9 @@ const ChatPanel = memo(function ChatPanel({
         summary={session?.summary}
         messagesHistory={messagesHistory}
         isLoading={isLoading}
-        hasStreamingContent={Boolean(streamingMsg?.content)}
+        hasStreamingContent={Boolean(
+          streamingMsg?.content || streamingMsg?.metadata?.knowledgeAgent,
+        )}
       />
 
       {error && (
@@ -335,13 +354,6 @@ const ChatPanel = memo(function ChatPanel({
       )}
 
       <div className="chat__footer">
-        <RepoSelector
-          onSelect={(repo) => {
-            const text = `请帮我审查 ${repo.fullName} 仓库的代码`;
-            setInputValue(text);
-            if (sessionId) chatActions.updateDraft(sessionId, text);
-          }}
-        />
         <div className="chat__controls">
           {isLoading && (
             <button className="chat__stop" onClick={stop}>

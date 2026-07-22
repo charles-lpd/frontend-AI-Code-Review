@@ -18,6 +18,7 @@ import {
 import MessageItem from '../components/chat/MessageItem/MessageItem';
 import { sendPublicChatStream } from '../api/index';
 import { sessionApi } from '../api/sessions';
+import { consumeKnowledgeChatStream } from '../services/knowledgeAgentStream';
 import { useChatStore } from '../store/useChatStore';
 import type { PublicChatMessage, PublicSessionInfo } from '../types/chat';
 import './PublicSession.css';
@@ -176,81 +177,42 @@ export default function PublicSession() {
         controller.signal,
       );
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('未获取到流式响应');
-
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
       let finalWarning: string | null = null;
-      let finalText = '';
+      const finalState = await consumeKnowledgeChatStream(response, {
+        signal: controller.signal,
+        onWarning: (nextWarning) => {
+          finalWarning = nextWarning;
+          setWarning(nextWarning);
+        },
+        onState: (state) => {
+          const updatedMessages = nextMessages.map((item) =>
+            item.id === assistantId
+              ? {
+                  ...item,
+                  content: state.answer,
+                  warning: finalWarning ?? undefined,
+                  metadata: { knowledgeAgent: state },
+                  status: 'streaming' as const,
+                }
+              : item,
+          );
+          setMessages(updatedMessages);
+          setPublicSessionCache(sessionId, {
+            sessionInfo: sessionInfo ?? undefined,
+            messages: updatedMessages,
+            lastActiveAt: Date.now(),
+          });
+        },
+      });
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer
-          .split('\n\n')
-          .map((block) => block.trim())
-          .filter(Boolean);
-        const consumed = buffer.lastIndexOf('\n\n');
-        if (consumed >= 0) {
-          buffer = buffer.slice(consumed + 2);
-        }
-
-        chunks.forEach((chunk) => {
-          if (!chunk.startsWith('data:')) return;
-          const data = chunk.replace(/^data:\s*/, '');
-          if (data === '[DONE]') return;
-          const payload = JSON.parse(data) as {
-            text?: string;
-            warning?: string;
-            error?: string;
-          };
-          if (payload.error) throw new Error(payload.error);
-          if (payload.warning) {
-            finalWarning = payload.warning;
-            setWarning(payload.warning);
-          }
-          if (payload.text) {
-            finalText += payload.text;
-            setMessages((prev) =>
-              prev.map((item) =>
-                item.id === assistantId
-                  ? {
-                      ...item,
-                      content: finalText,
-                      warning: finalWarning ?? undefined,
-                      status: 'streaming' as const,
-                    }
-                  : item,
-              ),
-            );
-            const updatedMessages = nextMessages.map((item) =>
-              item.id === assistantId
-                ? {
-                    ...item,
-                    content: finalText,
-                    warning: finalWarning ?? undefined,
-                    status: 'streaming' as const,
-                  }
-                : item,
-            );
-            setPublicSessionCache(sessionId, {
-              sessionInfo: sessionInfo ?? undefined,
-              messages: updatedMessages,
-              lastActiveAt: Date.now(),
-            });
-          }
-        });
-      }
-
-      setMessages((prev) => {
-        const doneMessages = prev.map((item) =>
+      setMessages((currentMessages) => {
+        const doneMessages = currentMessages.map((item) =>
           item.id === assistantId
               ? {
                   ...item,
-                  content: finalText,
+                  content: finalState.answer,
                   warning: finalWarning ?? undefined,
+                  metadata: { knowledgeAgent: finalState },
                   status: 'done' as const,
                 }
               : item,
@@ -401,7 +363,13 @@ export default function PublicSession() {
                 )}
                 <MessageItem
                   role={item.role}
-                  content={item.content || (item.status === 'streaming' ? '...' : '')}
+                  content={
+                    item.content ||
+                    (item.status === 'streaming' && !item.metadata?.knowledgeAgent
+                      ? '...'
+                      : '')
+                  }
+                  metadata={item.metadata}
                 />
               </div>
             ))

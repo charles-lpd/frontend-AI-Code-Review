@@ -2,7 +2,18 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Copy, Check, User, Bot, Wrench, Info } from 'lucide-react';
+import {
+  Bot,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
+  Info,
+  LoaderCircle,
+  User,
+  Wrench,
+  XCircle,
+} from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import type { ChatMessage, ChatRole } from '../../../types/chat';
 import './MessageItem.css';
@@ -135,6 +146,88 @@ const ReviewStreamView = memo(function ReviewStreamView({
   );
 });
 
+const KnowledgeAgentView = memo(function KnowledgeAgentView({
+  agent,
+}: {
+  agent: NonNullable<ChatMessage['metadata']>['knowledgeAgent'];
+}) {
+  const [open, setOpen] = useState(true);
+  const steps = useMemo(
+    () =>
+      Object.values(agent?.steps ?? {}).sort(
+        (left, right) => left.stepIndex - right.stepIndex,
+      ),
+    [agent?.steps],
+  );
+
+  if (!agent || steps.length === 0) return null;
+
+  const statusLabel =
+    agent.status === 'failed'
+      ? '执行失败'
+      : agent.status === 'completed'
+        ? '处理完成'
+        : '正在处理';
+
+  return (
+    <div className={`knowledge-agent knowledge-agent--${agent.status}`}>
+      <button
+        type="button"
+        className="knowledge-agent__toggle"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        <span className="knowledge-agent__heading">
+          {agent.status === 'running' ? (
+            <LoaderCircle size={15} className="knowledge-agent__spinner" />
+          ) : agent.status === 'failed' ? (
+            <XCircle size={15} />
+          ) : (
+            <CheckCircle2 size={15} />
+          )}
+          知识库 Agent · {statusLabel}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`knowledge-agent__chevron ${open ? 'is-open' : ''}`}
+        />
+      </button>
+      <div className={`knowledge-agent__body ${open ? 'is-open' : ''}`}>
+        <div className="knowledge-agent__body-inner">
+          {steps.map((step) => (
+            <div
+              className={`knowledge-agent__step knowledge-agent__step--${step.stepStatus}`}
+              key={step.stepKey}
+            >
+              <span className="knowledge-agent__step-icon">
+                {step.stepStatus === 'running' ? (
+                  <LoaderCircle size={14} className="knowledge-agent__spinner" />
+                ) : step.stepStatus === 'completed' ? (
+                  <CheckCircle2 size={14} />
+                ) : (
+                  <XCircle size={14} />
+                )}
+              </span>
+              <span className="knowledge-agent__step-label">{step.stepLabel}</span>
+              {step.stepStatus === 'completed' &&
+                typeof step.durationMs === 'number' && (
+                <span className="knowledge-agent__duration">
+                  {step.durationMs < 1000
+                    ? `${step.durationMs}ms`
+                    : `${(step.durationMs / 1000).toFixed(1)}s`}
+                </span>
+                )}
+            </div>
+          ))}
+          {agent.error && (
+            <div className="knowledge-agent__error">{agent.error}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 const MessageItem = memo(function MessageItem({
   role,
   content,
@@ -142,7 +235,8 @@ const MessageItem = memo(function MessageItem({
 }: MessageItemProps) {
   const processedContent = useMemo(() => processContent(content), [content]);
   const reviewStream = metadata?.reviewStream;
-
+  const knowledgeAgent = metadata?.knowledgeAgent;
+  console.log(knowledgeAgent, '123123')
   const icon = useMemo(() => {
     switch (role) {
       case 'user':
@@ -162,6 +256,9 @@ const MessageItem = memo(function MessageItem({
     <div className={`message-item message-item--${role}`}>
       <div className="message-item__avatar">{icon}</div>
       <div className="message-item__content">
+        {role === 'assistant' && (
+          <KnowledgeAgentView agent={knowledgeAgent} />
+        )}
         {role === 'tool' ? (
           <div className="message-item__tool-output">
             <div className="message-item__tool-label">工具调用结果</div>

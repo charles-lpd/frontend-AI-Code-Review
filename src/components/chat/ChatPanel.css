@@ -11,6 +11,9 @@
 }
 
 .chat__header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -237,6 +240,9 @@
 }
 
 .chat__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
   flex-shrink: 0;
   display: grid;
   gap: 0.75rem;

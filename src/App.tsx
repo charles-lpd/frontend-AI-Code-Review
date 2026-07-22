@@ -7,12 +7,17 @@ const Home = lazy(() => import('./pages/Home'));
 const Profile = lazy(() => import('./pages/Profile'));
 const ChatDetail = lazy(() => import('./pages/ChatDetail'));
 const PublicSession = lazy(() => import('./pages/PublicSession'));
+// const CodeReview = lazy(() => import('./pages/CodeReview'));
+// const AgentPage = lazy(() => import('./pages/Agent'));
+const ImageGeneration = lazy(() => import('./pages/ImageGeneration'));
+const VideoGeneration = lazy(() => import('./pages/VideoGeneration'));
 
 export default function App() {
   const location = useLocation();
   const { isAuthenticated, user, login, logout } = useAuth();
   const isMobileChatRoute =
     location.pathname === '/' || location.pathname.startsWith('/chat/');
+  const isChatWorkspaceRoute = isAuthenticated && isMobileChatRoute;
 
   const routeContent = useMemo(
     () => (
@@ -20,6 +25,13 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/chat/:sessionId" element={<Home />} />
         <Route path="/profile" element={<Profile />} />
+        {/* <Route path="/code-review" element={<CodeReview />} /> */}
+        {/* <Route path="/agent" element={<Agen。tPage />} /> */}
+        {/* <Route path="/agent/:runId" element={<AgentPage />} /> */}
+        <Route path="/image-generation" element={<ImageGeneration />} />
+        <Route path="/image-generation/:runId" element={<ImageGeneration />} />
+        <Route path="/video-generation" element={<VideoGeneration />} />
+        <Route path="/video-generation/:runId" element={<VideoGeneration />} />
         <Route path="/chat-details/:sessionId" element={<ChatDetail />} />
         <Route path="/public/session/:id" element={<PublicSession />} />
       </Routes>
@@ -28,7 +40,7 @@ export default function App() {
   );
 
   return (
-    <div className="app min-h-screen flex flex-col overflow-auto">
+    <div className="app">
       <nav className={`nav${isMobileChatRoute ? ' nav--chat-mobile' : ''}`}>
         <div className="nav__left">
           <span className="nav__brand">AI 知识库</span>
@@ -38,8 +50,40 @@ export default function App() {
             className={({ isActive }) =>
               `nav__tab${isActive ? ' nav__tab--active' : ''}`
             }
-          >
+            >
             对话
+          </NavLink>
+          {/* <NavLink
+            to="/code-review"
+            className={({ isActive }) =>
+              `nav__tab${isActive ? ' nav__tab--active' : ''}`
+            }
+          >
+            审查
+          </NavLink> */}
+          {/* <NavLink
+            to="/agent"
+            className={({ isActive }) =>
+              `nav__tab${isActive ? ' nav__tab--active' : ''}`
+            }
+          >
+            Agent
+          </NavLink> */}
+          <NavLink
+            to="/image-generation"
+            className={({ isActive }) =>
+              `nav__tab${isActive ? ' nav__tab--active' : ''}`
+            }
+          >
+            文生图
+          </NavLink>
+          <NavLink
+            to="/video-generation"
+            className={({ isActive }) =>
+              `nav__tab${isActive ? ' nav__tab--active' : ''}`
+            }
+          >
+            文生视频
           </NavLink>
         </div>
 
@@ -66,7 +110,7 @@ export default function App() {
         </div>
       </nav>
       <main
-        className={`app__main${isMobileChatRoute ? ' app__main--chat-mobile' : ''}`}
+        className={`app__main${isMobileChatRoute ? ' app__main--chat-mobile' : ''}${isChatWorkspaceRoute ? ' app__main--chat-workspace' : ''}`}
       >
         <Suspense fallback={<div className="app__loading w-full h-full flex items-center justify-center">加载中...</div>}>
           {routeContent}

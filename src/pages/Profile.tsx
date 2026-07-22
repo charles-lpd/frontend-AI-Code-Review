@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { githubApi, type GithubRepo } from '../api/github';
+import { imageGenerationApi, videoGenerationApi } from '../api/generation';
 import { useChatStore } from '../store/useChatStore';
+import type { GenerationRunListItem } from '../types/generation';
 import {
   User,
   ExternalLink,
@@ -13,8 +15,36 @@ import {
   MessageSquare,
   Globe,
   Lock,
+  Image as ImageIcon,
+  Video,
 } from 'lucide-react';
 import './Profile.css';
+
+type ProfileTab = 'repos' | 'images' | 'videos';
+
+function generationStatusLabel(status: string) {
+  switch (status) {
+    case 'queued':
+      return '排队中';
+    case 'running':
+      return '生成中';
+    case 'succeeded':
+      return '已完成';
+    case 'failed':
+      return '失败';
+    case 'cancelled':
+      return '已取消';
+    case 'rejected':
+      return '被拦截';
+    default:
+      return status;
+  }
+}
+
+function formatRunTime(value: GenerationRunListItem['updatedAt']) {
+  if (!value) return '时间未知';
+  return new Date(value).toLocaleString();
+}
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -24,13 +54,18 @@ export default function Profile() {
   const fetchSessions = useChatStore((s) => s.fetchSessions);
   const createSession = useChatStore((s) => s.createSession);
   const [repos, setRepos] = useState<GithubRepo[]>([]);
+  const [imageRuns, setImageRuns] = useState<GenerationRunListItem[]>([]);
+  const [videoRuns, setVideoRuns] = useState<GenerationRunListItem[]>([]);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('repos');
   const [loading, setLoading] = useState(false);
+  const [generationLoading, setGenerationLoading] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
       void fetchRepos();
+      void fetchGenerationRuns();
       if (!hasFetched) {
         void fetchSessions();
       }
@@ -47,6 +82,23 @@ export default function Profile() {
       setError(err.message || '获取仓库列表失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchGenerationRuns = async () => {
+    setGenerationLoading(true);
+    setError(null);
+    try {
+      const [images, videos] = await Promise.all([
+        imageGenerationApi.listRuns(),
+        videoGenerationApi.listRuns(),
+      ]);
+      setImageRuns(images);
+      setVideoRuns(videos);
+    } catch (err: any) {
+      setError(err.message || '获取生成记录失败');
+    } finally {
+      setGenerationLoading(false);
     }
   };
 
@@ -150,77 +202,185 @@ export default function Profile() {
           )}
         </section>
 
-        <div className="profile__section-header profile__section-header--repos">
-          <div className="profile__section-title">
-            <Code size={20} />
-            <h2>您的仓库 ({repos.length})</h2>
-          </div>
-          <button
-            className="profile__refresh"
-            onClick={fetchRepos}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              '刷新列表'
-            )}
-          </button>
-        </div>
-
-        {error && (
-          <div className="profile__error">
-            <p>{error}</p>
-          </div>
-        )}
-
-        <div className="profile__repo-grid">
-          {loading && repos.length === 0 ? (
-            <div className="profile__loading">
-              <Loader2 size={32} className="animate-spin" />
-              <p>正在拉取仓库数据...</p>
+        <section className="profile__panel">
+          <div className="profile__tabs-header">
+            <div className="profile__tabs" role="tablist" aria-label="个人资源">
+              <button
+                type="button"
+                className={`profile__tab${activeTab === 'repos' ? ' profile__tab--active' : ''}`}
+                onClick={() => setActiveTab('repos')}
+              >
+                <Code size={16} />
+                仓库 ({repos.length})
+              </button>
+              <button
+                type="button"
+                className={`profile__tab${activeTab === 'images' ? ' profile__tab--active' : ''}`}
+                onClick={() => setActiveTab('images')}
+              >
+                <ImageIcon size={16} />
+                图片 ({imageRuns.length})
+              </button>
+              <button
+                type="button"
+                className={`profile__tab${activeTab === 'videos' ? ' profile__tab--active' : ''}`}
+                onClick={() => setActiveTab('videos')}
+              >
+                <Video size={16} />
+                视频 ({videoRuns.length})
+              </button>
             </div>
-          ) : (
-            repos.map((repo) => (
-              <div key={repo.id} className="repo-card">
-                <div className="repo-card__header">
-                  <h3 className="repo-card__name">{repo.fullName}</h3>
-                  {repo.isPrivate && (
-                    <span className="repo-card__private-badge whitespace-nowrap">
-                      <Shield size={10} />
-                      私有
-                    </span>
-                  )}
-                </div>
-                <p className="repo-card__desc">
-                  {repo.description || '暂无描述'}
-                </p>
-                <div className="repo-card__footer">
-                  <div className="repo-card__meta">
-                    <span className="repo-card__branch">
-                      <Code size={12} />
-                      {repo.defaultBranch}
-                    </span>
-                    <span className="repo-card__date">
-                      <Calendar size={12} />
-                      {new Date(repo.updatedAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <a
-                    href={`https://github.com/${repo.fullName}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="repo-card__link"
-                  >
-                    <ExternalLink size={14} />
-                    查看
-                  </a>
-                </div>
-              </div>
-            ))
+            <button
+              className="profile__refresh"
+              onClick={activeTab === 'repos' ? fetchRepos : fetchGenerationRuns}
+              disabled={activeTab === 'repos' ? loading : generationLoading}
+            >
+              {(activeTab === 'repos' ? loading : generationLoading) ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                '刷新列表'
+              )}
+            </button>
+          </div>
+
+          {error && (
+            <div className="profile__error">
+              <p>{error}</p>
+            </div>
           )}
-        </div>
+
+          {activeTab === 'repos' && (
+            <div className="profile__repo-grid">
+              {loading && repos.length === 0 ? (
+                <div className="profile__loading">
+                  <Loader2 size={32} className="animate-spin" />
+                  <p>正在拉取仓库数据...</p>
+                </div>
+              ) : repos.length === 0 ? (
+                <div className="profile__empty-card">
+                  <p>暂无仓库数据。</p>
+                </div>
+              ) : (
+                repos.map((repo) => (
+                  <div key={repo.id} className="repo-card">
+                    <div className="repo-card__header">
+                      <h3 className="repo-card__name">{repo.fullName}</h3>
+                      {repo.isPrivate && (
+                        <span className="repo-card__private-badge whitespace-nowrap">
+                          <Shield size={10} />
+                          私有
+                        </span>
+                      )}
+                    </div>
+                    <p className="repo-card__desc">
+                      {repo.description || '暂无描述'}
+                    </p>
+                    <div className="repo-card__footer">
+                      <div className="repo-card__meta">
+                        <span className="repo-card__branch">
+                          <Code size={12} />
+                          {repo.defaultBranch}
+                        </span>
+                        <span className="repo-card__date">
+                          <Calendar size={12} />
+                          {new Date(repo.updatedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <a
+                        href={`https://github.com/${repo.fullName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="repo-card__link"
+                      >
+                        <ExternalLink size={14} />
+                        查看
+                      </a>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'images' && (
+            <GenerationRunGrid
+              emptyText="暂无图片生成记录。"
+              isLoading={generationLoading}
+              runs={imageRuns}
+              toPath={(runId) => `/image-generation/${runId}`}
+            />
+          )}
+
+          {activeTab === 'videos' && (
+            <GenerationRunGrid
+              emptyText="暂无视频生成记录。"
+              isLoading={generationLoading}
+              runs={videoRuns}
+              toPath={(runId) => `/video-generation/${runId}`}
+            />
+          )}
+        </section>
       </div>
+    </div>
+  );
+}
+
+function GenerationRunGrid({
+  emptyText,
+  isLoading,
+  runs,
+  toPath,
+}: {
+  emptyText: string;
+  isLoading: boolean;
+  runs: GenerationRunListItem[];
+  toPath: (runId: string) => string;
+}) {
+  if (isLoading && runs.length === 0) {
+    return (
+      <div className="profile__loading">
+        <Loader2 size={32} className="animate-spin" />
+        <p>正在拉取生成记录...</p>
+      </div>
+    );
+  }
+
+  if (runs.length === 0) {
+    return (
+      <div className="profile__empty-card">
+        <p>{emptyText}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="profile__generation-grid">
+      {runs.map((run) => (
+        <Link
+          key={run.runId}
+          to={toPath(run.runId)}
+          className="generation-run-card"
+        >
+          <div className="generation-run-card__header">
+            <span className={`generation-run-card__status generation-run-card__status--${run.status}`}>
+              {generationStatusLabel(String(run.status))}
+            </span>
+            <span className="generation-run-card__date">
+              {formatRunTime(run.updatedAt)}
+            </span>
+          </div>
+          <h3 className="generation-run-card__title">
+            {run.prompt || '未命名生成任务'}
+          </h3>
+          <div className="generation-run-card__meta">
+            {run.currentStep && <span>步骤: {run.currentStep}</span>}
+            {typeof run.progress === 'number' && <span>进度: {run.progress}%</span>}
+            {typeof run.artifactCount === 'number' && (
+              <span>产物: {run.artifactCount}</span>
+            )}
+          </div>
+        </Link>
+      ))}
     </div>
   );
 }
