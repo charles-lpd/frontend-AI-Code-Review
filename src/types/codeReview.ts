@@ -1,108 +1,140 @@
 export type CodeReviewTargetType = 'repo' | 'pr' | 'commit';
 
-export type ReviewStepKey =
-  | 'plan'
-  | 'fetch'
-  | 'review'
-  | 'summary'
-  | 'waiting'
-  | 'resume'
-  | 'writeback'
-  | 'pr';
-
 export type ReviewStepStatus =
   | 'pending'
   | 'running'
-  | 'done'
   | 'completed'
+  | 'failed'
   | 'waiting'
-  | 'failed';
+  | 'skipped'
+  | 'done';
 
 export interface ReviewStep {
-  stepKey: ReviewStepKey;
+  stepKey: string;
   stepLabel: string;
   stepStatus: ReviewStepStatus;
   stepIndex: number;
   stepTotal: number;
+  durationMs?: number;
+  message?: string;
 }
 
 export type CodeReviewRunStatus =
   | 'idle'
-  | 'planning'
-  | 'need_clarification'
-  | 'ready_to_start'
+  | 'understanding'
+  | 'waiting_clarification'
+  | 'ready_to_review'
   | 'reviewing'
   | 'waiting_confirmation'
+  | 'executing_followup'
   | 'resuming'
   | 'completed'
-  | 'failed';
+  | 'failed'
+  | 'planning'
+  | 'ready_to_start'
+  | string;
 
-export interface CodeReviewRequest {
-  reviewType: CodeReviewTargetType;
-  owner: string;
-  repo: string;
-  branch?: string;
-  filePath?: string;
-  pullNumber?: number;
-  sha?: string;
+export type CodeReviewMessageRole = 'user' | 'assistant' | 'system';
+
+export type CodeReviewMessageType =
+  | 'text'
+  | 'status'
+  | 'question'
+  | 'summary'
+  | 'error'
+  | 'action';
+
+export interface CodeReviewMessage {
+  id: string;
+  reviewId: string;
+  role: CodeReviewMessageRole;
+  messageType: CodeReviewMessageType;
+  content: string;
+  dataJson: Record<string, unknown> | null;
+  createdAt: string | number;
+}
+
+export interface CodeReviewConversationContext {
+  owner?: string;
+  repo?: string;
+  branch?: string | null;
+  filePath?: string | null;
+  pullNumber?: number | null;
+  sha?: string | null;
+  pageType?: CodeReviewTargetType | string | null;
+  [key: string]: unknown;
+}
+
+export interface CodeReviewChatRequest {
+  message: string;
+  reviewId?: string | null;
+  context?: CodeReviewConversationContext;
+}
+
+export interface CodeReviewReplyRequest {
+  message: string;
+  context?: CodeReviewConversationContext;
+}
+
+export interface CodeReviewConfirmAction {
   applyChanges?: boolean;
   createPR?: boolean;
   autoComment?: boolean;
 }
 
-export interface CodeReviewPlannerTask extends Partial<CodeReviewRequest> {
-  [key: string]: unknown;
+export interface CodeReviewConfirmRequest {
+  confirmed: true;
+  action?: CodeReviewConfirmAction;
 }
 
-export interface CodeReviewPlanResponse {
-  status: 'ready' | 'need_clarification' | string;
-  summary?: string;
-  task?: CodeReviewPlannerTask;
-  questions?: string[];
-  missingFields?: string[];
-  userId?: string;
-  canExecute?: boolean;
+export interface CodeReviewMessagesResponse {
+  reviewId: string;
+  messages: CodeReviewMessage[];
 }
 
-export interface CodeReviewPlan {
-  goal?: string;
-  summary?: string;
-  focus?: string[] | string;
-  dimensions?: string[] | Array<{ name?: string; description?: string }>;
-  steps?: string[] | Array<{ title?: string; detail?: string }>;
-  autoComment?: boolean;
+export interface CodeReviewConversationSummary {
+  reviewId: string;
+  title: string;
+  status: CodeReviewRunStatus;
+  updatedAt: number;
+  lastMessage: string | null;
+  task: {
+    reviewType: CodeReviewTargetType | null;
+    owner: string | null;
+    repo: string | null;
+    branch: string | null;
+    filePath: string | null;
+    pullNumber: number | null;
+    sha: string | null;
+    applyChanges: boolean;
+    createPR: boolean;
+    autoComment: boolean;
+  };
+}
+
+export interface CodeReviewTask {
+  reviewType?: CodeReviewTargetType;
+  owner?: string;
+  repo?: string;
+  branch?: string | null;
+  filePath?: string | null;
+  pullNumber?: number | null;
+  sha?: string | null;
   applyChanges?: boolean;
   createPR?: boolean;
-  [key: string]: unknown;
-}
-
-export interface CodeReviewGraphEvent {
-  graphNode?: string;
-  graphStatus?: 'pending' | 'running' | 'success' | 'failed' | string;
-  duration?: number;
-  text?: string;
-  [key: string]: unknown;
-}
-
-export interface CodeReviewDimensionResult {
-  name?: string;
-  title?: string;
-  summary?: string;
-  content?: string;
-  ok?: boolean;
-  [key: string]: unknown;
+  autoComment?: boolean;
+  planConfirmed?: boolean;
 }
 
 export interface CodeReviewRunSnapshot {
   reviewId: string;
   threadId: string;
-  status: string;
+  status: CodeReviewRunStatus;
+  intent?: string | null;
   currentStep: string;
-  currentStepKey?: ReviewStepKey | null;
-  currentStepLabel?: string | null;
-  currentStepStatus?: ReviewStepStatus | null;
-  stepIndex?: number | null;
-  stepTotal?: number | null;
+  steps: ReviewStep[];
+  waitingReason?: string | null;
+  lastUserMessage?: string | null;
   task: {
     reviewType: CodeReviewTargetType;
     owner: string;
@@ -115,72 +147,167 @@ export interface CodeReviewRunSnapshot {
     createPR?: boolean;
     autoComment?: boolean;
   };
-  steps?: ReviewStep[] | null;
+  summary?: string | null;
   summaryContext: string | null;
   finalSummary: string | null;
-  reviewPlan: CodeReviewPlan | null;
-  dimensionResults: CodeReviewDimensionResult[] | null;
+  questions: string[] | null;
+  missingFields: string[] | null;
+  answers?: unknown;
+  contextJson?: Record<string, unknown> | null;
+  reviewPlan: unknown;
+  dimensionResults: unknown;
   generatedFix: string | null;
   modificationBranch: string | null;
   pullRequestUrl: string | null;
   latestCheckpointId: string | null;
+  canReply?: boolean;
+  canConfirm?: boolean;
+  currentStepKey?: string | null;
+  currentStepLabel?: string | null;
+  currentStepStatus?: ReviewStepStatus | null;
+  stepIndex?: number | null;
+  stepTotal?: number | null;
 }
 
-export interface CodeReviewStreamTypedChunk {
-  type:
-    | 'status'
-    | 'plan'
-    | 'graph_event'
-    | 'dimension_start'
-    | 'dimension_header'
-    | 'dimension_chunk'
-    | 'dimension_done'
-    | 'summary_header'
-    | 'summary_chunk'
-    | 'summary_done'
-    | 'comment_status'
-    | 'final';
-  text?: string;
+export interface CodeReviewStreamMetaEvent {
+  type: 'meta';
   reviewId?: string;
-  reviewPlan?: CodeReviewPlan;
-  graphNode?: string;
-  graphStatus?: CodeReviewGraphEvent['graphStatus'];
-  stepKey?: ReviewStepKey;
-  stepLabel?: string;
-  stepStatus?: ReviewStepStatus;
+  status?: CodeReviewRunStatus;
+  ts?: number;
+}
+
+export interface CodeReviewStreamStatusEvent {
+  type: 'status';
+  reviewId?: string;
+  phase?: 'understand' | 'fetch' | 'review' | 'summary' | 'resume' | 'comment' | 'final' | string;
+  text: string;
+  ts?: number;
+}
+
+export interface CodeReviewStreamHeartbeatEvent {
+  type: 'heartbeat';
+  ts?: number;
+}
+
+export interface CodeReviewStreamNeedClarificationEvent {
+  type: 'need_clarification';
+  reviewId?: string;
+  questions: string[];
+  missingFields?: string[];
+  ts?: number;
+}
+
+export interface CodeReviewStreamPlanReadyEvent {
+  type: 'plan_ready';
+  reviewId?: string;
+  intent?: string;
+  reviewType?: CodeReviewTargetType;
+  target?: Record<string, unknown>;
+  ts?: number;
+}
+
+export interface CodeReviewStreamStepUpdateEvent {
+  type: 'step_update';
+  reviewId?: string;
+  stepKey: string;
+  stepLabel: string;
+  stepStatus: ReviewStepStatus;
   stepIndex?: number;
   stepTotal?: number;
-  graphMethod?: string;
-  graphNamespace?: string;
-  graphData?: unknown;
-  duration?: number;
-  ok?: boolean;
-  phase?:
-    | 'fetch'
-    | 'review'
-    | 'summary'
-    | 'comment'
-    | 'final'
-    | 'graph'
-    | string;
-  dimension?: string;
-  commentStatus?: string;
-  runStatus?: CodeReviewRunStatus | 'running' | 'resuming' | string;
-  step?: string;
-  [key: string]: unknown;
+  ts?: number;
 }
 
-export interface CodeReviewStreamDoneChunk {
-  done: true;
+export interface CodeReviewStreamReviewChunkEvent {
+  type: 'review_chunk';
   reviewId?: string;
+  phase?: 'review' | string;
+  text: string;
+  ts?: number;
 }
 
-export interface CodeReviewStreamErrorChunk {
-  error: string;
+export interface CodeReviewStreamReviewSummaryEvent {
+  type: 'review_summary';
   reviewId?: string;
+  phase?: 'summary' | string;
+  text: string;
+  ts?: number;
+}
+
+export interface CodeReviewStreamWaitingConfirmationEvent {
+  type: 'waiting_confirmation';
+  reviewId?: string;
+  text: string;
+  ts?: number;
+}
+
+export interface CodeReviewStreamFinishedEvent {
+  type: 'finished';
+  reviewId?: string;
+  status?: CodeReviewRunStatus;
+  generatedFix?: string | null;
+  modificationBranch?: string | null;
+  pullRequestUrl?: string | null;
+  ts?: number;
+}
+
+export interface CodeReviewStreamErrorEvent {
+  type: 'error';
+  reviewId?: string;
+  phase?: string;
+  text: string;
+  ts?: number;
+}
+
+export interface CodeReviewStreamTextEvent {
+  type: 'text';
+  reviewId?: string;
+  text: string;
+  ts?: number;
+}
+
+export interface CodeReviewStreamAgentStatusEvent {
+  type: 'agent_status';
+  reviewId?: string;
+  event:
+    | 'agent_started'
+    | 'model_started'
+    | 'model_finished'
+    | 'tool_started'
+    | 'tool_finished'
+    | 'agent_finished'
+    | 'error';
+  stepKey: string;
+  stepLabel: string;
+  stepStatus: ReviewStepStatus;
+  stepIndex: number;
+  stepTotal: number;
+  durationMs?: number;
+  message?: string;
+  ts?: number;
+}
+
+export interface CodeReviewStreamWarningEvent {
+  type: 'warning';
+  reviewId?: string;
+  warning: string;
+  text?: string;
+  ts?: number;
 }
 
 export type CodeReviewStreamChunk =
-  | CodeReviewStreamTypedChunk
-  | CodeReviewStreamDoneChunk
-  | CodeReviewStreamErrorChunk;
+  | CodeReviewStreamMetaEvent
+  | CodeReviewStreamStatusEvent
+  | CodeReviewStreamHeartbeatEvent
+  | CodeReviewStreamNeedClarificationEvent
+  | CodeReviewStreamPlanReadyEvent
+  | CodeReviewStreamStepUpdateEvent
+  | CodeReviewStreamReviewChunkEvent
+  | CodeReviewStreamReviewSummaryEvent
+  | CodeReviewStreamWaitingConfirmationEvent
+  | CodeReviewStreamFinishedEvent
+  | CodeReviewStreamErrorEvent
+  | CodeReviewStreamTextEvent
+  | CodeReviewStreamAgentStatusEvent
+  | CodeReviewStreamWarningEvent
+  | { done: true; reviewId?: string; ts?: number }
+  | { error: string; reviewId?: string; ts?: number };

@@ -1,105 +1,166 @@
 import { BACKEND_API_BASE_URL, CODE_REVIEW_API_PATH } from '../constants';
 import { useAuthStore } from '../store/useAuthStore';
 import type {
-  CodeReviewPlanResponse,
-  CodeReviewRequest,
+  CodeReviewChatRequest,
+  CodeReviewConfirmRequest,
+  CodeReviewConversationSummary,
+  CodeReviewConversationContext,
+  CodeReviewMessage,
+  CodeReviewMessagesResponse,
+  CodeReviewReplyRequest,
   CodeReviewRunSnapshot,
 } from '../types/codeReview';
 
-type PlanPayload = {
-  message?: string;
-  messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
-};
-
-type ContinuePayload = {
-  reviewId?: string;
-  resume?: { confirmed?: boolean };
-};
-
-function buildAuthHeaders() {
+function requireToken() {
   const token = useAuthStore.getState().token;
+  if (!token) {
+    throw new Error('请先登录后再使用代码审查功能');
+  }
+  return token;
+}
+
+function buildAuthHeaders(includeJson = true) {
+  const token = requireToken();
   return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(includeJson ? { 'Content-Type': 'application/json' } : {}),
+    Authorization: `Bearer ${token}`,
   };
 }
 
-async function assertJsonResponseOk(response: Response) {
-  if (response.ok) return;
+async function readErrorMessage(response: Response) {
+  const contentType = response.headers.get('content-type') || '';
 
-  const errorData = await response.json().catch(() => ({}));
-  throw new Error(
-    errorData.error?.message ||
-      errorData.error ||
-      `请求失败: ${response.status}`,
-  );
+  if (contentType.includes('application/json')) {
+    const data = await response.json().catch(() => ({}));
+    return (
+      data.error?.message ||
+      data.error ||
+      `请求失败: ${response.status}`
+    );
+  }
+
+  const text = await response.text().catch(() => '');
+  return text.trim() || `请求失败: ${response.status}`;
 }
 
-export async function planCodeReview(
-  payload: PlanPayload,
-): Promise<CodeReviewPlanResponse> {
+async function assertResponseOk(response: Response) {
+  if (response.ok) return;
+  throw new Error(await readErrorMessage(response));
+}
+
+async function postCodeReviewNdjson(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+) {
+  const response = await fetch(`${BACKEND_API_BASE_URL}${CODE_REVIEW_API_PATH}${path}`, {
+    method: 'POST',
+    headers: buildAuthHeaders(),
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  await assertResponseOk(response);
+  return response;
+}
+
+async function postCodeReviewJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(
-    `${BACKEND_API_BASE_URL}${CODE_REVIEW_API_PATH}/plan`,
+    `${BACKEND_API_BASE_URL}${CODE_REVIEW_API_PATH}${path}`,
     {
       method: 'POST',
       headers: buildAuthHeaders(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     },
   );
 
-  await assertJsonResponseOk(response);
+  await assertResponseOk(response);
   return response.json();
 }
 
-export async function startCodeReviewStream(
-  payload: CodeReviewRequest,
-  signal?: AbortSignal,
-) {
+async function getCodeReviewJson<T>(path: string): Promise<T> {
   const response = await fetch(
-    `${BACKEND_API_BASE_URL}${CODE_REVIEW_API_PATH}/start`,
+    `${BACKEND_API_BASE_URL}${CODE_REVIEW_API_PATH}${path}`,
     {
-      method: 'POST',
-      headers: buildAuthHeaders(),
-      body: JSON.stringify(payload),
-      signal,
+      method: 'GET',
+      headers: buildAuthHeaders(false),
     },
   );
 
-  await assertJsonResponseOk(response);
-  return response;
+  await assertResponseOk(response);
+  return response.json();
 }
 
-export async function continueCodeReviewStream(
-  reviewId: string,
-  payload: ContinuePayload = { reviewId, resume: { confirmed: true } },
-  signal?: AbortSignal,
-) {
+async function deleteCodeReviewJson<T>(path: string): Promise<T> {
   const response = await fetch(
-    `${BACKEND_API_BASE_URL}${CODE_REVIEW_API_PATH}/${reviewId}/continue`,
+    `${BACKEND_API_BASE_URL}${CODE_REVIEW_API_PATH}${path}`,
     {
-      method: 'POST',
-      headers: buildAuthHeaders(),
-      body: JSON.stringify(payload),
-      signal,
+      method: 'DELETE',
+      headers: buildAuthHeaders(false),
     },
   );
 
-  await assertJsonResponseOk(response);
-  return response;
+  await assertResponseOk(response);
+  return response.json();
+}
+
+export async function chatCodeReview(
+  payload: CodeReviewChatRequest,
+  signal?: AbortSignal,
+) {
+  return postCodeReviewNdjson('/chat', payload, signal);
+}
+
+export async function replyCodeReview(
+  reviewId: string,
+  payload: CodeReviewReplyRequest,
+  signal?: AbortSignal,
+) {
+  return postCodeReviewNdjson(`/${reviewId}/reply`, payload, signal);
+}
+
+export async function confirmCodeReview(
+  reviewId: string,
+  payload: CodeReviewConfirmRequest,
+  signal?: AbortSignal,
+) {
+  return postCodeReviewNdjson(`/${reviewId}/confirm`, payload, signal);
 }
 
 export async function getCodeReviewRun(
   reviewId: string,
 ): Promise<CodeReviewRunSnapshot> {
-  const response = await fetch(
-    `${BACKEND_API_BASE_URL}${CODE_REVIEW_API_PATH}/${reviewId}`,
-    {
-      method: 'GET',
-      headers: buildAuthHeaders(),
-    },
-  );
-
-  await assertJsonResponseOk(response);
-  return response.json();
+  return getCodeReviewJson<CodeReviewRunSnapshot>(`/${reviewId}`);
 }
+
+export async function getCodeReviewMessages(
+  reviewId: string,
+): Promise<CodeReviewMessagesResponse> {
+  return getCodeReviewJson<CodeReviewMessagesResponse>(`/${reviewId}/messages`);
+}
+
+export async function listCodeReviewSessions(): Promise<CodeReviewConversationSummary[]> {
+  return getCodeReviewJson<CodeReviewConversationSummary[]>('/sessions');
+}
+
+export async function createCodeReviewSession(payload?: {
+  title?: string;
+  reviewType?: string;
+  owner?: string;
+  repo?: string;
+  branch?: string | null;
+  filePath?: string | null;
+  pullNumber?: number | null;
+  sha?: string | null;
+  applyChanges?: boolean;
+  createPR?: boolean;
+  autoComment?: boolean;
+}): Promise<CodeReviewConversationSummary> {
+  return postCodeReviewJson<CodeReviewConversationSummary>('/sessions', payload ?? {});
+}
+
+export async function deleteCodeReviewSession(reviewId: string): Promise<{ success: boolean }> {
+  return deleteCodeReviewJson<{ success: boolean }>(`/sessions/${reviewId}`);
+}
+
+export type { CodeReviewConversationContext, CodeReviewMessage };

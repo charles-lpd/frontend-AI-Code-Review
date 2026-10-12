@@ -67,12 +67,14 @@ export default function PublicSession() {
 
   useEffect(() => {
     if (!sessionId) return;
+    let cancelled = false;
 
     const load = async () => {
       setLoading(true);
       setStreamError(null);
       try {
         const detail = await sessionApi.getPublicDetail(sessionId);
+        if (cancelled) return;
         const nextDetail = {
           ...detail,
           cachedAt: Date.now(),
@@ -81,19 +83,23 @@ export default function PublicSession() {
         setWarning(nextDetail.warning);
         setPublicSessionCache(sessionId, {
           sessionInfo: nextDetail,
-          messages: cachedSession?.messages ?? [],
+          messages: useChatStore.getState().publicSessionCache[sessionId]?.messages ?? [],
           lastActiveAt: Date.now(),
         });
       } catch (err: any) {
+        if (cancelled) return;
         setSessionInfo(null);
         setStreamError(err.message || '公开会话加载失败');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     void load();
-  }, [cachedSession?.messages, sessionId, setPublicSessionCache]);
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, setPublicSessionCache]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -122,7 +128,7 @@ export default function PublicSession() {
         setWarning(nextDetail.warning);
         setPublicSessionCache(sessionId, {
           sessionInfo: nextDetail,
-          messages,
+          messages: useChatStore.getState().publicSessionCache[sessionId]?.messages ?? [],
           lastActiveAt: Date.now(),
         });
       } catch (err: any) {
@@ -133,7 +139,7 @@ export default function PublicSession() {
         if (!silent) setRefreshingKnowledge(false);
       }
     },
-    [messageApi, messages, sessionId, setPublicSessionCache],
+    [messageApi, sessionId, setPublicSessionCache],
   );
 
   const handleSend = useCallback(async () => {

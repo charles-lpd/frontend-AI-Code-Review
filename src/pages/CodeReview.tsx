@@ -1,84 +1,90 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import { message } from 'antd';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
-  ChevronDown,
-  ExternalLink,
-  Loader2,
-  Play,
+  CheckCircle2,
+  PanelLeft,
+  PanelRightClose,
   RefreshCcw,
+  Plus,
   Square,
   Sparkles,
+  Send,
+  X,
 } from 'lucide-react';
 import ConnectGithub from '../components/ConnectGithub';
-import {
-  continueCodeReviewStream,
-  getCodeReviewRun,
-  planCodeReview,
-  startCodeReviewStream,
-} from '../api/codeReview';
+import MessageItem from '../components/chat/MessageItem/MessageItem';
+import { chatCodeReview, confirmCodeReview, getCodeReviewMessages, getCodeReviewRun, replyCodeReview } from '../api/codeReview';
+import { consumeCodeReviewStream } from '../services/codeReviewStream';
 import { useAuth } from '../hooks/useAuth';
+import { useCodeReviewStore } from '../store/useCodeReviewStore';
 import type {
-  CodeReviewDimensionResult,
-  CodeReviewPlan,
-  CodeReviewPlanResponse,
-  CodeReviewPlannerTask,
-  CodeReviewRequest,
+  CodeReviewChatRequest,
+  CodeReviewConfirmAction,
+  CodeReviewConversationContext,
+  CodeReviewMessage,
   CodeReviewRunSnapshot,
   CodeReviewRunStatus,
   CodeReviewStreamChunk,
-  CodeReviewStreamTypedChunk,
+  CodeReviewTask,
   ReviewStep,
-  ReviewStepKey,
-  ReviewStepStatus,
 } from '../types/codeReview';
 import './CodeReview.css';
+import './Home.css';
+import '../components/chat/ChatPanel.css';
+import '../components/chat/ChatSessionNav.css';
 
-const PRODUCT_STEP_DEFS: Array<Pick<ReviewStep, 'stepKey' | 'stepLabel'>> = [
-  { stepKey: 'plan', stepLabel: '生成计划' },
-  { stepKey: 'fetch', stepLabel: '拉取代码' },
-  { stepKey: 'review', stepLabel: '审查分析' },
-  { stepKey: 'summary', stepLabel: '生成总结' },
-  { stepKey: 'waiting', stepLabel: '等待确认' },
-  { stepKey: 'resume', stepLabel: '继续执行' },
-  { stepKey: 'writeback', stepLabel: '写回代码' },
-  { stepKey: 'pr', stepLabel: '创建 PR / 评论' },
-];
+type ReviewDimensionResult = {
+  name?: string;
+  title?: string;
+  summary?: string;
+  content?: string;
+  ok?: boolean;
+  [key: string]: unknown;
+};
 
-function createInitialSteps(): ReviewStep[] {
-  return PRODUCT_STEP_DEFS.map((step, index) => ({
-    ...step,
-    stepStatus: 'pending',
-    stepIndex: index,
-    stepTotal: PRODUCT_STEP_DEFS.length,
-  }));
+const DESKTOP_NAV_COLLAPSED_KEY = 'code-review.desktopNavCollapsed';
+const MOBILE_NAV_OPEN_KEY = 'code-review.mobileNavOpen';
+const DESKTOP_MEDIA_QUERY = '(min-width: 1025px)';
+
+function readStoredBoolean(key: string, fallback = false) {
+  if (typeof window === 'undefined') return fallback;
+  const value = window.localStorage.getItem(key);
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
 }
 
 function statusLabel(status?: string) {
   switch (status) {
-    case 'running':
-    case 'execute':
-    case 'reviewing':
-    case 'resuming':
-      return '运行中';
-    case 'success':
-    case 'finished':
-    case 'completed':
-      return '已结束';
-    case 'failed':
-    case 'error':
-      return '失败';
-    case 'pending':
-      return '等待中';
-    case 'update':
-      return '更新中';
-    case 'waiting_confirmation':
-      return '待确认';
+    case 'understanding':
+      return '理解中';
+    case 'waiting_clarification':
+      return '等待补充';
+    case 'ready_to_review':
     case 'ready_to_start':
-      return '可启动';
-    case 'need_clarification':
-      return '需补充';
+      return '准备就绪';
+    case 'reviewing':
+    case 'running':
+      return '审查中';
+    case 'waiting_confirmation':
+      return '等待确认';
+    case 'executing_followup':
+    case 'resuming':
+      return '继续执行';
+    case 'completed':
+      return '已完成';
+    case 'failed':
+      return '失败';
     case 'planning':
       return '规划中';
     case 'idle':
@@ -88,389 +94,319 @@ function statusLabel(status?: string) {
   }
 }
 
-function statusClass(status?: string) {
-  switch (status) {
-    case 'running':
-    case 'execute':
-    case 'reviewing':
-    case 'resuming':
-      return 'code-review-page__node-status--running';
-    case 'success':
-    case 'finished':
-    case 'completed':
-      return 'code-review-page__node-status--success';
-    case 'failed':
-    case 'error':
-      return 'code-review-page__node-status--failed';
-    case 'waiting_confirmation':
-    case 'pending':
-    case 'update':
-    case 'info':
-      return 'code-review-page__node-status--pending';
-    default:
-      return 'code-review-page__node-status--idle';
-  }
-}
+function normalizeTaskFromTarget(target?: Record<string, unknown>): Partial<CodeReviewTask> {
+  if (!target) return {};
 
-function stepStatusLabel(status?: ReviewStepStatus) {
-  switch (status) {
-    case 'running':
-      return '进行中';
-    case 'done':
-    case 'completed':
-      return '已完成';
-    case 'waiting':
-      return '等待';
-    case 'failed':
-      return '失败';
-    default:
-      return '待开始';
-  }
-}
-
-function stepStatusClass(status?: ReviewStepStatus) {
-  switch (status) {
-    case 'running':
-      return 'code-review-page__step-badge--running';
-    case 'done':
-    case 'completed':
-      return 'code-review-page__step-badge--done';
-    case 'waiting':
-      return 'code-review-page__step-badge--waiting';
-    case 'failed':
-      return 'code-review-page__step-badge--failed';
-    default:
-      return 'code-review-page__step-badge--pending';
-  }
-}
-
-function isSseHeartbeat(block: string) {
-  return block.trim().startsWith(':');
-}
-
-function toPlanPayloadMessages(messages: PlanConversationMessage[]) {
-  return messages.map((item) => ({
-    role: item.role,
-    content: item.content,
-  }));
-}
-
-function mapRunStatus(status?: string): CodeReviewRunStatus {
-  switch (status) {
-    case 'planning':
-    case 'need_clarification':
-    case 'ready_to_start':
-    case 'reviewing':
-    case 'waiting_confirmation':
-    case 'resuming':
-    case 'completed':
-    case 'failed':
-      return status;
-    case 'running':
-      return 'reviewing';
-    default:
-      return 'idle';
-  }
-}
-
-function mapInternalStepToProductStep(
-  step?: string,
-): ReviewStepKey | undefined {
-  switch (step) {
-    case 'resolveAuth':
-    case 'resolveTarget':
-    case 'planReview':
-      return 'plan';
-    case 'fetchContext':
-      return 'fetch';
-    case 'reviewDimensions':
-    case 'reflectFindings':
-      return 'review';
-    case 'followUp':
-    case 'summarize':
-      return 'summary';
-    case 'pauseForConfirmation':
-      return 'waiting';
-    case 'generateFix':
-      return 'resume';
-    case 'writeBack':
-      return 'writeback';
-    case 'comment':
-      return 'pr';
-    default:
-      return undefined;
-  }
-}
-
-function mapPhaseToProductStep(
-  phase?: string,
-): ReviewStepKey | undefined {
-  switch (phase) {
-    case 'fetch':
-      return 'fetch';
-    case 'review':
-      return 'review';
-    case 'summary':
-      return 'summary';
-    case 'comment':
-      return 'pr';
-    case 'final':
-      return 'summary';
-    case 'graph':
-      return undefined;
-    default:
-      return undefined;
-  }
-}
-
-function mapGraphStatusToStepStatus(
-  graphStatus?: string,
-): ReviewStepStatus {
-  switch (graphStatus) {
-    case 'running':
-    case 'execute':
-      return 'running';
-    case 'success':
-    case 'finished':
-      return 'done';
-    case 'waiting':
-      return 'waiting';
-    case 'failed':
-    case 'error':
-      return 'failed';
-    case 'update':
-    case 'info':
-    default:
-      return 'running';
-  }
-}
-
-function mapRunStatusToStepStatus(
-  runStatus?: string,
-): ReviewStepStatus | undefined {
-  switch (runStatus) {
-    case 'running':
-    case 'resuming':
-      return 'running';
-    case 'waiting_confirmation':
-      return 'waiting';
-    case 'completed':
-      return 'completed';
-    case 'failed':
-      return 'failed';
-    default:
-      return undefined;
-  }
-}
-
-function describeTask(
-  task?: CodeReviewPlanResponse['task'] | CodeReviewRunSnapshot['task'] | null,
-) {
-  if (!task) return '等待生成审查任务';
-
-  return [
-    task.reviewType || 'repo',
-    task.owner && task.repo ? `${task.owner}/${task.repo}` : null,
-    task.branch ? `@ ${task.branch}` : null,
-    task.filePath ? task.filePath : null,
-    task.pullNumber ? `PR #${task.pullNumber}` : null,
-    task.sha ? task.sha : null,
-  ]
-    .filter(Boolean)
-    .join(' / ');
-}
-
-function getDimensionTitle(result: CodeReviewDimensionResult, index: number) {
-  return result.title || result.name || result.summary || `维度 ${index + 1}`;
-}
-
-function normalizeSnapshotTask(
-  snapshot: CodeReviewRunSnapshot,
-): CodeReviewPlannerTask {
   return {
-    reviewType: snapshot.task.reviewType,
-    owner: snapshot.task.owner,
-    repo: snapshot.task.repo,
-    branch: snapshot.task.branch ?? undefined,
-    filePath: snapshot.task.filePath ?? undefined,
-    pullNumber: snapshot.task.pullNumber ?? undefined,
-    sha: snapshot.task.sha ?? undefined,
-    applyChanges: snapshot.task.applyChanges,
-    createPR: snapshot.task.createPR,
-    autoComment: snapshot.task.autoComment,
+    reviewType:
+      typeof target.type === 'string'
+        ? (target.type as CodeReviewTask['reviewType'])
+        : typeof target.reviewType === 'string'
+          ? (target.reviewType as CodeReviewTask['reviewType'])
+          : undefined,
+    owner: typeof target.owner === 'string' ? target.owner : undefined,
+    repo: typeof target.repo === 'string' ? target.repo : undefined,
+    branch: typeof target.branch === 'string' ? target.branch : undefined,
+    filePath: typeof target.filePath === 'string' ? target.filePath : undefined,
+    pullNumber:
+      typeof target.pullNumber === 'number'
+        ? target.pullNumber
+        : typeof target.pullNumber === 'string'
+          ? Number.parseInt(target.pullNumber, 10)
+          : undefined,
+    sha: typeof target.sha === 'string' ? target.sha : undefined,
   };
 }
 
-function mergeStepProgress(
-  prev: ReviewStep[],
-  stepKey: ReviewStepKey,
-  nextStatus: ReviewStepStatus,
+function buildContext(task?: Partial<CodeReviewTask> | null): CodeReviewConversationContext | undefined {
+  if (!task) return undefined;
+
+  const context: CodeReviewConversationContext = {};
+  if (task.owner) context.owner = task.owner;
+  if (task.repo) context.repo = task.repo;
+  if (task.branch !== undefined) context.branch = task.branch ?? null;
+  if (task.filePath !== undefined) context.filePath = task.filePath ?? null;
+  if (task.pullNumber !== undefined) context.pullNumber = task.pullNumber ?? null;
+  if (task.sha !== undefined) context.sha = task.sha ?? null;
+  if (task.reviewType) context.pageType = task.reviewType;
+
+  return Object.keys(context).length > 0 ? context : undefined;
+}
+
+function getMessageTitle(messageItem: CodeReviewMessage): string {
+  if (messageItem.role === 'user') return '你';
+  if (messageItem.messageType === 'question') return '助手追问';
+  if (messageItem.messageType === 'summary') return '审查总结';
+  if (messageItem.messageType === 'error') return '错误';
+  if (messageItem.messageType === 'action') return '执行动作';
+  if (messageItem.messageType === 'status') return '系统状态';
+  return '助手';
+}
+
+interface ReviewSessionNavProps {
+  conversations: ReturnType<typeof useCodeReviewStore.getState>['conversations'];
+  mobileOpen: boolean;
+  desktopCollapsed: boolean;
+  activeReviewId: string | null;
+  onDesktopToggle: () => void;
+  onMobileClose: () => void;
+  onNewReview: () => void;
+  onRemove: (reviewId: string) => void;
+}
+
+const ReviewSessionNav = memo(function ReviewSessionNav({
+  conversations,
+  mobileOpen,
+  desktopCollapsed,
+  activeReviewId,
+  onDesktopToggle,
+  onMobileClose,
+  onNewReview,
+  onRemove,
+}: ReviewSessionNavProps) {
+  return (
+    <>
+      {mobileOpen && (
+        <button
+          type="button"
+          className="session-nav__overlay"
+          aria-label="关闭审查列表遮罩"
+          onClick={onMobileClose}
+        />
+      )}
+
+      <aside
+        className={`session-nav${mobileOpen ? ' session-nav--mobile-open' : ''}${desktopCollapsed ? ' session-nav--desktop-collapsed' : ''}`}
+      >
+        <div className="session-nav__desktop-header">
+          <button
+            type="button"
+            className="session-nav__desktop-toggle"
+            onClick={onDesktopToggle}
+            aria-label={desktopCollapsed ? '展开侧边栏' : '收起侧边栏'}
+          >
+            {desktopCollapsed ? <PanelLeft size={18} /> : <PanelRightClose size={18} />}
+          </button>
+        </div>
+
+        <div className="session-nav__mobile-header">
+          <div className="session-nav__mobile-brand">Code Review</div>
+          <button
+            type="button"
+            className="session-nav__mobile-close flex justify-center items-center"
+            onClick={onMobileClose}
+            aria-label="关闭审查列表"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className={`session-nav__new${desktopCollapsed && !mobileOpen ? ' session-nav__new--icon' : ''}`}
+          onClick={onNewReview}
+          aria-label="新建审查"
+          title="新建审查"
+        >
+          {desktopCollapsed && !mobileOpen ? <Plus size={18} /> : '+ 新审查'}
+        </button>
+
+        <ul className="session-nav__list">
+          {conversations.map((conversation) => (
+            <li key={conversation.reviewId}>
+              <NavLink
+                to={`/code-review/${conversation.reviewId}`}
+                className={({ isActive }) =>
+                  `session-nav__item${isActive || conversation.reviewId === activeReviewId ? ' session-nav__item--active' : ''}`
+                }
+                onClick={onMobileClose}
+              >
+                <span className="session-nav__title">{conversation.title}</span>
+                <span className="session-nav__badge">
+                  {statusLabel(conversation.status)}
+                </span>
+                {conversations.length > 1 && (
+                  <button
+                    type="button"
+                    className="session-nav__delete flex justify-center items-center"
+                    title="删除会话"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onRemove(conversation.reviewId);
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    </>
+  );
+});
+
+function formatReviewConversationTitle(
+  task?: Partial<CodeReviewTask> | null,
+  fallback?: string | null,
 ) {
-  const next = prev.map((step) => ({ ...step }));
-  const index = next.findIndex((step) => step.stepKey === stepKey);
-  if (index < 0) return prev;
-
-  if (nextStatus === 'running' || nextStatus === 'waiting' || nextStatus === 'completed') {
-    for (let i = 0; i < index; i += 1) {
-      if (next[i].stepStatus !== 'failed') {
-        next[i].stepStatus = nextStatus === 'completed' ? 'completed' : 'done';
-      }
-    }
+  if (task?.owner && task?.repo) {
+    const subject = task.filePath
+      ? task.filePath
+      : task.pullNumber
+        ? `PR #${task.pullNumber}`
+        : task.sha
+          ? `Commit ${task.sha.slice(0, 7)}`
+          : task.branch
+            ? task.branch
+            : '仓库';
+    return `${task.owner}/${task.repo} · ${subject}`;
   }
 
-  next[index].stepStatus = nextStatus;
+  if (task?.branch) return `审查 ${task.branch}`;
 
-  if (nextStatus === 'failed') {
-    return next;
-  }
-
-  if ((nextStatus === 'done' || nextStatus === 'completed') && index + 1 < next.length) {
-    for (let i = index + 1; i < next.length; i += 1) {
-      if (next[i].stepStatus === 'running') {
-        next[i].stepStatus = 'pending';
-      }
-    }
-  }
-
-  return next;
+  return fallback || '新建代码审查';
 }
 
-function buildStepsFromSnapshot(snapshot: CodeReviewRunSnapshot): ReviewStep[] {
-  if (snapshot.steps?.length) {
-    return snapshot.steps.map((step, index) => ({
-      ...step,
-      stepIndex: step.stepIndex ?? index,
-      stepTotal: step.stepTotal ?? snapshot.steps!.length,
-    }));
-  }
-
-  const next = createInitialSteps();
-  const currentStepKey =
-    snapshot.currentStepKey ??
-    mapInternalStepToProductStep(snapshot.currentStep) ??
-    (snapshot.status === 'waiting_confirmation'
-      ? 'waiting'
-      : snapshot.status === 'completed'
-        ? 'pr'
-        : snapshot.status === 'failed'
-          ? 'review'
-          : 'plan');
-  const currentStatus =
-    snapshot.currentStepStatus ??
-    mapRunStatusToStepStatus(snapshot.status) ??
-    'done';
-  const index = next.findIndex((step) => step.stepKey === currentStepKey);
-
-  if (index >= 0) {
-    if (currentStatus === 'running' || currentStatus === 'waiting' || currentStatus === 'completed') {
-      for (let i = 0; i < index; i += 1) {
-        next[i].stepStatus = currentStatus === 'completed' ? 'completed' : 'done';
-      }
-    }
-    next[index].stepStatus = currentStatus;
-    if (currentStatus === 'done' || currentStatus === 'completed' || snapshot.status === 'completed') {
-      for (let i = 0; i < next.length; i += 1) {
-        if (next[i].stepStatus === 'pending') {
-          next[i].stepStatus = 'completed';
-        }
-      }
-    }
-  }
-
-  return next;
+function formatReviewConversationSubtitle(
+  status: CodeReviewRunStatus,
+  currentStep?: ReviewStep | null,
+  lastMessage?: string | null,
+) {
+  if (currentStep?.stepLabel) return currentStep.stepLabel;
+  if (lastMessage) return lastMessage;
+  return statusLabel(status);
 }
 
-type PlanConversationMessage = {
-  role: 'user' | 'assistant';
-  content: string;
-};
-
-function createFallbackStepTitle(stepKey?: ReviewStepKey | null) {
-  switch (stepKey) {
-    case 'plan':
-      return '生成计划';
-    case 'fetch':
-      return '拉取代码';
-    case 'review':
-      return '审查分析';
-    case 'summary':
-      return '生成总结';
-    case 'waiting':
-      return '等待确认';
-    case 'resume':
-      return '继续执行';
-    case 'writeback':
-      return '写回代码';
-    case 'pr':
-      return '创建 PR / 评论';
-    default:
-      return '等待通过 reviewId 获取步骤';
-  }
-}
-
-function safePanelKey(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]+/g, '_');
-}
-
-export default function CodeReview() {
+function CodeReviewPageBase() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { reviewId: routeReviewId } = useParams<{ reviewId?: string }>();
   const routeStateReviewId =
     (location.state as { reviewId?: string } | null)?.reviewId ?? null;
-  const initialReviewId = useMemo(
-    () => new URLSearchParams(location.search).get('reviewId') ?? routeStateReviewId,
-    [location.search, routeStateReviewId],
+  const initialReviewId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return routeReviewId ?? params.get('reviewId') ?? routeStateReviewId ?? null;
+  }, [location.search, routeStateReviewId, routeReviewId]);
+
+  const [mobileNavOpen, setMobileNavOpen] = useState(() =>
+    readStoredBoolean(MOBILE_NAV_OPEN_KEY),
   );
+  const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(() =>
+    readStoredBoolean(DESKTOP_NAV_COLLAPSED_KEY),
+  );
+  const [sidebarTransitionEnabled, setSidebarTransitionEnabled] =
+    useState(false);
+
   const [messageApi, contextHolder] = message.useMessage();
-  const [prompt, setPrompt] = useState('');
-  const [clarificationAnswer, setClarificationAnswer] = useState('');
-  const [planConversation, setPlanConversation] = useState<
-    PlanConversationMessage[]
-  >([]);
-  const [planResponse, setPlanResponse] =
-    useState<CodeReviewPlanResponse | null>(null);
-  const [questions, setQuestions] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
   const [reviewId, setReviewId] = useState<string | null>(initialReviewId);
-  const [reviewStatus, setReviewStatus] =
-    useState<CodeReviewRunStatus>('idle');
-  const [reviewSteps, setReviewSteps] = useState<ReviewStep[] | null>(null);
-  const [currentStepKey, setCurrentStepKey] = useState<ReviewStepKey>('plan');
-  const [logs, setLogs] = useState<{ id: string; kind: string; text: string; createdAt: number }[]>([]);
-  const [finalText, setFinalText] = useState('');
-  const [summaryContext, setSummaryContext] = useState('');
-  const [reviewPlan, setReviewPlan] = useState<CodeReviewPlan | null>(null);
-  const [dimensionResults, setDimensionResults] = useState<
-    CodeReviewDimensionResult[]
-  >([]);
-  const [generatedFix, setGeneratedFix] = useState<string | null>(null);
-  const [modificationBranch, setModificationBranch] = useState<string | null>(
-    null,
-  );
-  const [pullRequestUrl, setPullRequestUrl] = useState<string | null>(null);
-  const [currentStatus, setCurrentStatus] = useState('等待开始');
-  const [isPlanning, setIsPlanning] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState<CodeReviewRunStatus>('idle');
+  const [statusText, setStatusText] = useState('等待开始');
+  const [messages, setMessages] = useState<CodeReviewMessage[]>([]);
+  const [stepMap, setStepMap] = useState<Record<string, ReviewStep>>({});
+  const [currentStepKey, setCurrentStepKey] = useState<string | null>(null);
+  const [currentTask, setCurrentTask] = useState<Partial<CodeReviewTask> | null>(null);
+  const [, setCurrentQuestions] = useState<string[]>([]);
+  const [, setCurrentMissingFields] = useState<string[]>([]);
+  const [, setSummaryContext] = useState('');
+  const [, setFinalSummary] = useState('');
+  const [, setReviewPlan] = useState<Record<string, unknown> | null>(null);
+  const [, setDimensionResults] = useState<ReviewDimensionResult[]>([]);
+  const [, setGeneratedFix] = useState<string | null>(null);
+  const [, setModificationBranch] = useState<string | null>(null);
+  const [, setPullRequestUrl] = useState<string | null>(null);
+  const [, setLogs] = useState<{ id: string; kind: string; text: string; createdAt: number }[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [, setIsRestoring] = useState(false);
   const [plannerError, setPlannerError] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
-  const [openPanels, setOpenPanels] = useState<Record<string, boolean>>({
-    summary: true,
-    execution: true,
-    plan: true,
-  });
+
+  const reviewConversations = useCodeReviewStore((s) => s.conversations);
+  const fetchReviewConversations = useCodeReviewStore((s) => s.fetchConversations);
+  const createReviewConversation = useCodeReviewStore((s) => s.createConversation);
+  const upsertReviewConversation = useCodeReviewStore((s) => s.upsertConversation);
+  const removeReviewConversation = useCodeReviewStore((s) => s.removeConversation);
+  const reviewConversationsLoading = useCodeReviewStore((s) => s.isLoading);
+  const reviewConversationsFetched = useCodeReviewStore((s) => s.hasFetched);
+
   const abortRef = useRef<AbortController | null>(null);
+  const initializingReviewRef = useRef(false);
   const hydratedReviewIdRef = useRef<string | null>(null);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const activeTask = planResponse?.task ?? null;
-  const queryReviewId = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get('reviewId');
-  }, [location.search]);
+  const canReply = useMemo(
+    () => (reviewId ? snapshotCanReply(reviewStatus) : true),
+    [reviewId, reviewStatus],
+  );
+  const canConfirm = useMemo(() => snapshotCanConfirm(reviewStatus), [reviewStatus]);
+  const orderedSteps = useMemo(() => Object.values(stepMap).sort((a, b) => a.stepIndex - b.stepIndex), [stepMap]);
+  const currentStep = useMemo(() => {
+    if (currentStepKey && stepMap[currentStepKey]) {
+      return stepMap[currentStepKey];
+    }
+    return (
+      orderedSteps.find(
+        (step) => step.stepStatus === 'running' || step.stepStatus === 'waiting',
+      ) ?? orderedSteps[0] ?? null
+    );
+  }, [currentStepKey, orderedSteps, stepMap]);
+  const reviewConversationSubtitle = useMemo(
+    () => formatReviewConversationSubtitle(reviewStatus, currentStep, messages.at(-1)?.content ?? statusText),
+    [currentStep, messages, reviewStatus, statusText],
+  );
 
-  const currentStep = useMemo(
-    () => reviewSteps?.find((step) => step.stepKey === currentStepKey) ?? null,
-    [currentStepKey, reviewSteps],
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(MOBILE_NAV_OPEN_KEY, String(mobileNavOpen));
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      DESKTOP_NAV_COLLAPSED_KEY,
+      String(desktopNavCollapsed),
+    );
+  }, [desktopNavCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let frameId = window.requestAnimationFrame(() => {
+      setSidebarTransitionEnabled(true);
+    });
+
+    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSidebarTransitionEnabled(false);
+      setMobileNavOpen(false);
+      if (!event.matches) {
+        setDesktopNavCollapsed(readStoredBoolean(DESKTOP_NAV_COLLAPSED_KEY));
+      }
+      frameId = window.requestAnimationFrame(() => {
+        setSidebarTransitionEnabled(true);
+      });
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void fetchReviewConversations(true);
+  }, [fetchReviewConversations, isAuthenticated]);
+
+  const orderedReviewConversations = useMemo(
+    () => [...reviewConversations].sort((a, b) => b.updatedAt - a.updatedAt),
+    [reviewConversations],
   );
 
   const addLog = useCallback((kind: string, text: string) => {
@@ -487,104 +423,203 @@ export default function CodeReview() {
     ]);
   }, []);
 
-  const isPanelOpen = useCallback(
-    (key: string) => Boolean(openPanels[key]),
-    [openPanels],
+  const addMessage = useCallback((item: Omit<CodeReviewMessage, 'id' | 'createdAt'>) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        ...item,
+      },
+    ]);
+  }, []);
+
+  const normalizeConversationTask = useCallback((task?: Partial<CodeReviewTask> | null) => ({
+    reviewType: task?.reviewType ?? null,
+    owner: task?.owner ?? null,
+    repo: task?.repo ?? null,
+    branch: task?.branch ?? null,
+    filePath: task?.filePath ?? null,
+    pullNumber: task?.pullNumber ?? null,
+    sha: task?.sha ?? null,
+    applyChanges: Boolean(task?.applyChanges),
+    createPR: Boolean(task?.createPR),
+    autoComment: Boolean(task?.autoComment),
+  }), []);
+
+  const appendAssistantText = useCallback((reviewItemId: string, text: string) => {
+    if (!text) return;
+
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'assistant' && last.messageType === 'text') {
+        const next = [...prev];
+        next[next.length - 1] = {
+          ...last,
+          content: `${last.content}${text}`,
+        };
+        return next;
+      }
+
+      return [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          reviewId: reviewItemId,
+          role: 'assistant',
+          messageType: 'text',
+          content: text,
+          dataJson: null,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    });
+  }, []);
+
+  const syncConversationRecord = useCallback(
+    (patch?: {
+      reviewId?: string | null;
+      status?: CodeReviewRunStatus;
+      task?: Partial<CodeReviewTask> | null;
+      lastMessage?: string | null;
+      title?: string | null;
+      currentStep?: ReviewStep | null;
+    }) => {
+      const nextReviewId = patch?.reviewId ?? reviewId ?? hydratedReviewIdRef.current;
+      if (!nextReviewId) return;
+
+      upsertReviewConversation({
+        reviewId: nextReviewId,
+        title:
+          patch?.title ??
+          formatReviewConversationTitle(patch?.task ?? currentTask, patch?.lastMessage ?? statusText),
+        status: patch?.status ?? reviewStatus,
+        updatedAt: Date.now(),
+        lastMessage:
+          patch?.lastMessage ??
+          patch?.currentStep?.message ??
+          currentStep?.message ??
+          statusText,
+        task: normalizeConversationTask(patch?.task ?? currentTask),
+      });
+    },
+    [currentStep?.message, currentTask, normalizeConversationTask, reviewId, reviewStatus, statusText, upsertReviewConversation],
   );
 
-  const togglePanel = useCallback((key: string) => {
-    setOpenPanels((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  }, []);
+  useEffect(() => {
+    syncConversationRecord({
+      reviewId,
+      status: reviewStatus,
+      task: currentTask,
+      title: formatReviewConversationTitle(
+        currentTask,
+        messages.at(-1)?.content || statusText,
+      ),
+      lastMessage:
+        messages.at(-1)?.content ||
+        reviewConversationSubtitle ||
+        statusText,
+      currentStep,
+    });
+  }, [
+    currentStep,
+    currentTask,
+    messages,
+    reviewConversationSubtitle,
+    reviewId,
+    reviewStatus,
+    statusText,
+    syncConversationRecord,
+  ]);
 
   const syncReviewIdToUrl = useCallback(
     (nextReviewId: string | null) => {
+      const pathname = routeReviewId ? '/code-review' : location.pathname;
       const params = new URLSearchParams(location.search);
+
       if (nextReviewId) {
         params.set('reviewId', nextReviewId);
       } else {
         params.delete('reviewId');
       }
 
-      const search = params.toString();
       navigate(
         {
-          pathname: location.pathname,
-          search: search ? `?${search}` : '',
+          pathname: routeReviewId && nextReviewId ? `/code-review/${nextReviewId}` : pathname,
+          search: params.toString() ? `?${params.toString()}` : '',
         },
         { replace: true },
       );
     },
-    [location.pathname, location.search, navigate],
+    [location.pathname, location.search, navigate, routeReviewId],
   );
 
-  const hydrateReviewSnapshot = useCallback(
-    (
-      snapshot: CodeReviewRunSnapshot,
-      options?: { keepPlanResponse?: boolean; silent?: boolean },
-    ) => {
+  const applySnapshot = useCallback(
+    (snapshot: CodeReviewRunSnapshot, loadedMessages?: CodeReviewMessage[]) => {
       setReviewId(snapshot.reviewId);
-      syncReviewIdToUrl(snapshot.reviewId);
-      setReviewStatus(mapRunStatus(snapshot.status));
-      setCurrentStatus(
+      setReviewStatus(snapshot.status);
+      setStatusText(
         snapshot.currentStepLabel ||
-          snapshot.currentStep ||
+          snapshot.summary ||
+          snapshot.finalSummary ||
           statusLabel(snapshot.status),
       );
-      setReviewPlan(snapshot.reviewPlan);
-      setDimensionResults(snapshot.dimensionResults ?? []);
-      setGeneratedFix(snapshot.generatedFix);
-      setModificationBranch(snapshot.modificationBranch);
-      setPullRequestUrl(snapshot.pullRequestUrl);
+      setCurrentTask(snapshot.task);
+      setCurrentQuestions(snapshot.questions ?? []);
+      setCurrentMissingFields(snapshot.missingFields ?? []);
       setSummaryContext(snapshot.summaryContext ?? '');
-      setFinalText(snapshot.finalSummary ?? '');
-      setReviewSteps(buildStepsFromSnapshot(snapshot));
-      setCurrentStepKey(
-        snapshot.currentStepKey ??
-          mapInternalStepToProductStep(snapshot.currentStep) ??
-          'plan',
+      setFinalSummary(snapshot.finalSummary ?? '');
+      setReviewPlan((snapshot.reviewPlan as Record<string, unknown>) ?? null);
+      setDimensionResults((snapshot.dimensionResults as ReviewDimensionResult[]) ?? []);
+      setGeneratedFix(snapshot.generatedFix ?? null);
+      setModificationBranch(snapshot.modificationBranch ?? null);
+      setPullRequestUrl(snapshot.pullRequestUrl ?? null);
+      setCurrentStepKey(snapshot.currentStepKey ?? snapshot.currentStep ?? null);
+      setStepMap(
+        Object.fromEntries(
+          (snapshot.steps ?? []).map((step) => [step.stepKey, step]),
+        ),
       );
-
-      if (!options?.keepPlanResponse) {
-        setPlanResponse((prev) => ({
-          status: 'ready',
-          summary: prev?.summary || '已恢复审查任务。',
-          task: normalizeSnapshotTask(snapshot),
-          questions: prev?.questions ?? [],
-          missingFields: prev?.missingFields ?? [],
-          userId: prev?.userId,
-          canExecute: true,
-        }));
+      if (loadedMessages) {
+        setMessages(
+          loadedMessages.filter(
+            (item) => !(item.role === 'system' && item.messageType === 'status'),
+          ),
+        );
       }
-
       hydratedReviewIdRef.current = snapshot.reviewId;
+      syncReviewIdToUrl(snapshot.reviewId);
+    },
+    [syncReviewIdToUrl],
+  );
 
+  const refreshReviewState = useCallback(
+    async (targetReviewId: string, options?: { silent?: boolean }) => {
       if (!options?.silent) {
-        addLog('restore', `已恢复审查任务 ${snapshot.reviewId}`);
+        setIsRestoring(true);
+      }
+
+      try {
+        const [snapshot, messageResult] = await Promise.all([
+          getCodeReviewRun(targetReviewId),
+          getCodeReviewMessages(targetReviewId).catch(() => null),
+        ]);
+        applySnapshot(snapshot, messageResult?.messages ?? []);
+        return snapshot;
+      } finally {
+        if (!options?.silent) {
+          setIsRestoring(false);
+        }
       }
     },
-    [addLog, syncReviewIdToUrl],
+    [applySnapshot],
   );
 
-  const refreshReviewSnapshot = useCallback(
-    async (targetReviewId: string, options?: { silent?: boolean }) => {
-      const snapshot = await getCodeReviewRun(targetReviewId);
-      hydrateReviewSnapshot(snapshot, {
-        keepPlanResponse: true,
-        silent: options?.silent ?? false,
-      });
-      return snapshot;
-    },
-    [hydrateReviewSnapshot],
-  );
-
-  const refreshReviewSnapshotWithRetry = useCallback(
+  const refreshReviewStateWithRetry = useCallback(
     async (targetReviewId: string, options?: { silent?: boolean }) => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          const snapshot = await refreshReviewSnapshot(targetReviewId, options);
+          const snapshot = await refreshReviewState(targetReviewId, options);
           const hasCompletedOutputs =
             snapshot.status !== 'completed' ||
             Boolean(snapshot.generatedFix) ||
@@ -596,15 +631,11 @@ export default function CodeReview() {
           }
 
           if (attempt < 2) {
-            await new Promise((resolve) => {
-              window.setTimeout(resolve, 350);
-            });
+            await new Promise((resolve) => window.setTimeout(resolve, 350));
           }
         } catch (error) {
           if (attempt < 2) {
-            await new Promise((resolve) => {
-              window.setTimeout(resolve, 350);
-            });
+            await new Promise((resolve) => window.setTimeout(resolve, 350));
             continue;
           }
           throw error;
@@ -613,1173 +644,796 @@ export default function CodeReview() {
 
       return null;
     },
-    [refreshReviewSnapshot],
+    [refreshReviewState],
   );
 
-  const setStepProgress = useCallback(
-    (
-      stepKey: ReviewStepKey,
-      stepStatus: ReviewStepStatus,
-      statusText?: string,
-    ) => {
-      setReviewSteps((prev) =>
-        prev ? mergeStepProgress(prev, stepKey, stepStatus) : prev,
-      );
-      setCurrentStepKey(stepKey);
-      if (statusText) {
-        setCurrentStatus(statusText);
-      }
+  const upsertStep = useCallback(
+    (step: ReviewStep) => {
+      setStepMap((prev) => ({
+        ...prev,
+        [step.stepKey]: prev[step.stepKey]
+          ? { ...prev[step.stepKey], ...step }
+          : step,
+      }));
+      setCurrentStepKey(step.stepKey);
     },
     [],
   );
 
-  const resetExecutionState = useCallback(() => {
-    setReviewSteps(null);
-    setCurrentStepKey('plan');
-    setLogs([]);
-    setFinalText('');
+  const appendStreamStatus = useCallback(
+    (kind: string, text: string) => {
+      if (!text.trim()) return;
+      addLog(kind, text);
+    },
+    [addLog],
+  );
+
+  const handleStreamEvent = useCallback(
+    (chunk: CodeReviewStreamChunk) => {
+      if ('done' in chunk && chunk.done) {
+        return;
+      }
+
+      if (!('type' in chunk)) {
+        return;
+      }
+
+      const eventReviewId = 'reviewId' in chunk ? chunk.reviewId : undefined;
+
+      if (chunk.type === 'text') {
+        const activeReviewId = eventReviewId ?? reviewId ?? hydratedReviewIdRef.current ?? '';
+        if (activeReviewId) {
+          setReviewId(activeReviewId);
+          syncReviewIdToUrl(activeReviewId);
+        }
+        appendAssistantText(activeReviewId, chunk.text);
+        addLog('text', chunk.text);
+        if (!reviewStatus || reviewStatus === 'idle') {
+          setReviewStatus('reviewing');
+        }
+        return;
+      }
+
+      if (chunk.type === 'warning') {
+        const warningText = chunk.text || chunk.warning;
+        setPlannerError(warningText);
+        addLog('warning', warningText);
+        messageApi.warning(warningText);
+        return;
+      }
+
+      if (chunk.type === 'agent_status') {
+        const activeReviewId = eventReviewId ?? reviewId ?? hydratedReviewIdRef.current ?? '';
+        if (activeReviewId) {
+          setReviewId(activeReviewId);
+          syncReviewIdToUrl(activeReviewId);
+        }
+
+        const nextStep: ReviewStep = {
+          stepKey: chunk.stepKey,
+          stepLabel: chunk.stepLabel,
+          stepStatus: chunk.stepStatus,
+          stepIndex: chunk.stepIndex,
+          stepTotal: chunk.stepTotal,
+          durationMs: chunk.durationMs,
+          message: chunk.message,
+        };
+        upsertStep(nextStep);
+        setStatusText(chunk.stepLabel || chunk.stepKey);
+        addLog(chunk.event, chunk.stepLabel);
+
+        if (chunk.event === 'error' || chunk.stepStatus === 'failed') {
+          setReviewStatus('failed');
+          setStreamError(chunk.message || chunk.stepLabel || '代码审查失败');
+          return;
+        }
+
+        if (chunk.stepStatus === 'waiting') {
+          if (chunk.stepKey === 'analysis' || chunk.stepKey === 'resolveTarget') {
+            setReviewStatus('waiting_clarification');
+          } else {
+            setReviewStatus('waiting_confirmation');
+          }
+          return;
+        }
+
+        if (chunk.event === 'agent_finished') {
+          if (chunk.stepKey === 'agent' || chunk.stepKey === 'pauseForConfirmation') {
+            setReviewStatus('waiting_confirmation');
+          } else if (reviewStatus !== 'completed') {
+            setReviewStatus('reviewing');
+          }
+          return;
+        }
+
+        if (
+          chunk.event === 'agent_started' ||
+          chunk.event === 'model_started' ||
+          chunk.event === 'tool_started'
+        ) {
+          if (reviewStatus === 'idle' || reviewStatus === 'understanding') {
+            setReviewStatus('reviewing');
+          }
+          return;
+        }
+
+        if (chunk.event === 'model_finished' || chunk.event === 'tool_finished') {
+          if (reviewStatus === 'understanding') {
+            setReviewStatus('reviewing');
+          }
+          return;
+        }
+      }
+
+      if ('error' in chunk && typeof chunk.error === 'string') {
+        setReviewStatus('failed');
+        setStreamError(chunk.error);
+        setStatusText(chunk.error);
+        addLog('error', chunk.error);
+        addMessage({
+          reviewId: reviewId ?? hydratedReviewIdRef.current ?? '',
+          role: 'assistant',
+          messageType: 'error',
+          content: chunk.error,
+          dataJson: { phase: 'error', reviewId: eventReviewId ?? reviewId ?? null },
+        });
+        return;
+      }
+
+      switch (chunk.type) {
+        case 'meta':
+          if (eventReviewId) {
+            setReviewId(eventReviewId);
+            syncReviewIdToUrl(eventReviewId);
+          }
+          if (chunk.status) {
+            setReviewStatus(chunk.status);
+          }
+          break;
+        case 'status':
+          setStatusText(chunk.text);
+          appendStreamStatus(chunk.phase || 'status', chunk.text);
+          break;
+        case 'need_clarification':
+          setReviewStatus('waiting_clarification');
+          setCurrentQuestions(chunk.questions ?? []);
+          setCurrentMissingFields(chunk.missingFields ?? []);
+          setStatusText(chunk.questions?.[0] || '请补充缺失信息');
+          addMessage({
+            reviewId: eventReviewId ?? reviewId ?? '',
+            role: 'assistant',
+            messageType: 'question',
+            content: (chunk.questions ?? []).join('\n'),
+            dataJson: {
+              questions: chunk.questions ?? [],
+              missingFields: chunk.missingFields ?? [],
+            },
+          });
+          break;
+        case 'plan_ready':
+          setReviewStatus('reviewing');
+          setCurrentTask((prev) => ({
+            ...prev,
+            ...normalizeTaskFromTarget(chunk.target),
+          }));
+          setStatusText('已识别审查目标，开始执行审查');
+          break;
+        case 'step_update': {
+          const nextStep: ReviewStep = {
+            stepKey: chunk.stepKey,
+            stepLabel: chunk.stepLabel,
+            stepStatus: chunk.stepStatus,
+            stepIndex: typeof chunk.stepIndex === 'number' ? chunk.stepIndex : 0,
+            stepTotal: typeof chunk.stepTotal === 'number' ? chunk.stepTotal : 0,
+          };
+          upsertStep(nextStep);
+          setStatusText(chunk.stepLabel || chunk.stepKey);
+          break;
+        }
+        case 'review_chunk':
+          appendStreamStatus(chunk.phase || 'review', chunk.text);
+          appendAssistantText(eventReviewId ?? reviewId ?? '', chunk.text);
+          break;
+        case 'review_summary':
+          setSummaryContext((prev) => `${prev}${prev ? '\n' : ''}${chunk.text}`);
+          addMessage({
+            reviewId: eventReviewId ?? reviewId ?? '',
+            role: 'assistant',
+            messageType: 'summary',
+            content: chunk.text,
+            dataJson: { phase: chunk.phase ?? 'summary' },
+          });
+          break;
+        case 'waiting_confirmation':
+          setReviewStatus('waiting_confirmation');
+          setStatusText(chunk.text);
+          addMessage({
+            reviewId: eventReviewId ?? reviewId ?? '',
+            role: 'assistant',
+            messageType: 'action',
+            content: chunk.text,
+            dataJson: { waiting: true },
+          });
+          break;
+        case 'finished':
+          if (chunk.status === 'waiting_clarification') {
+            setReviewStatus('waiting_clarification');
+          } else if (chunk.status === 'waiting_confirmation') {
+            setReviewStatus('waiting_confirmation');
+          } else if (chunk.status === 'completed') {
+            setReviewStatus('completed');
+            setStatusText('审查完成');
+          } else if (chunk.status === 'failed') {
+            setReviewStatus('failed');
+            setStatusText('审查失败');
+          }
+
+          if (chunk.generatedFix !== undefined) {
+            setGeneratedFix(chunk.generatedFix ?? null);
+          }
+          if (chunk.modificationBranch !== undefined) {
+            setModificationBranch(chunk.modificationBranch ?? null);
+          }
+          if (chunk.pullRequestUrl !== undefined) {
+            setPullRequestUrl(chunk.pullRequestUrl ?? null);
+          }
+          break;
+        default:
+          break;
+      }
+    },
+    [addLog, addMessage, appendStreamStatus, reviewId, syncReviewIdToUrl, upsertStep],
+  );
+
+  const hydrateReviewFromServer = useCallback(
+    async (targetReviewId: string) => {
+      setIsRestoring(true);
+      setPlannerError(null);
+      setStreamError(null);
+      try {
+        await refreshReviewStateWithRetry(targetReviewId, { silent: true });
+      } catch (error: any) {
+        const errorMessage = error?.message || '恢复审查失败';
+        setReviewStatus('failed');
+        setStreamError(errorMessage);
+      } finally {
+        setIsRestoring(false);
+      }
+    },
+    [refreshReviewStateWithRetry],
+  );
+
+  useEffect(() => {
+    if (!isAuthenticated || !initialReviewId) return;
+    if (hydratedReviewIdRef.current === initialReviewId) return;
+    void hydrateReviewFromServer(initialReviewId);
+  }, [hydrateReviewFromServer, initialReviewId, isAuthenticated]);
+
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      !reviewConversationsFetched ||
+      reviewConversationsLoading ||
+      initializingReviewRef.current
+    ) {
+      return;
+    }
+
+    const sync = async () => {
+      const currentConversations = useCodeReviewStore.getState().conversations;
+
+      if (initialReviewId) {
+        const exists = currentConversations.some(
+          (conversation) => conversation.reviewId === initialReviewId,
+        );
+        if (exists && hydratedReviewIdRef.current !== initialReviewId) {
+          await hydrateReviewFromServer(initialReviewId);
+        }
+        return;
+      }
+
+      if (reviewId) {
+        const exists = currentConversations.some(
+          (conversation) => conversation.reviewId === reviewId,
+        );
+        if (exists) {
+          return;
+        }
+      }
+
+      if (currentConversations.length === 0) {
+        initializingReviewRef.current = true;
+        try {
+          const newReviewId = await createReviewConversation();
+          hydratedReviewIdRef.current = newReviewId;
+          setReviewId(newReviewId);
+          syncReviewIdToUrl(newReviewId);
+          await hydrateReviewFromServer(newReviewId);
+        } catch (error) {
+          console.error('初始化代码审查会话失败:', error);
+        } finally {
+          initializingReviewRef.current = false;
+        }
+        return;
+      }
+
+      const targetReviewId = reviewId ?? currentConversations[0]?.reviewId ?? null;
+      if (targetReviewId && targetReviewId !== reviewId) {
+        setReviewId(targetReviewId);
+        syncReviewIdToUrl(targetReviewId);
+        if (hydratedReviewIdRef.current !== targetReviewId) {
+          await hydrateReviewFromServer(targetReviewId);
+        }
+      }
+    };
+
+    void sync();
+  }, [
+    createReviewConversation,
+    hydrateReviewFromServer,
+    initialReviewId,
+    isAuthenticated,
+    reviewConversationsFetched,
+    reviewConversationsLoading,
+    reviewId,
+    syncReviewIdToUrl,
+  ]);
+
+  useEffect(() => {
+    const el = messageListRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [isSending, messages.length, reviewStatus, statusText]);
+
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+  }, [draft, isSending]);
+
+  const resetLocalState = useCallback((options?: { keepUrl?: boolean }) => {
+    abortRef.current?.abort();
+    setDraft('');
+    setReviewId(null);
+    setReviewStatus('idle');
+    setStatusText('等待开始');
+    setMessages([]);
+    setStepMap({});
+    setCurrentStepKey(null);
+    setCurrentTask(null);
+    setCurrentQuestions([]);
+    setCurrentMissingFields([]);
     setSummaryContext('');
+    setFinalSummary('');
     setReviewPlan(null);
     setDimensionResults([]);
     setGeneratedFix(null);
     setModificationBranch(null);
     setPullRequestUrl(null);
-    setCurrentStatus('等待开始');
-    setStreamError(null);
-  }, []);
-
-  const resetAll = useCallback(() => {
-    abortRef.current?.abort();
-    setPrompt('');
-    setClarificationAnswer('');
-    setPlanConversation([]);
-    setPlanResponse(null);
-    setQuestions([]);
-    setReviewId(null);
-    setReviewStatus('idle');
+    setLogs([]);
+    setIsSending(false);
     setPlannerError(null);
-    setIsPlanning(false);
-    setIsStreaming(false);
-    setIsRestoring(false);
+    setStreamError(null);
     hydratedReviewIdRef.current = null;
-    resetExecutionState();
-    syncReviewIdToUrl(null);
-  }, [resetExecutionState, syncReviewIdToUrl]);
+    if (!options?.keepUrl) {
+      syncReviewIdToUrl(null);
+    }
+  }, [syncReviewIdToUrl]);
 
-  const applyGraphEvent = useCallback(
-    (event: CodeReviewStreamTypedChunk) => {
-      const stepKey =
-        event.stepKey ??
-        mapInternalStepToProductStep(event.graphNode) ??
-        mapPhaseToProductStep(event.phase);
-      if (!stepKey) return;
-
-      const nextStatus =
-        event.stepStatus ??
-        mapGraphStatusToStepStatus(event.graphStatus) ??
-        mapRunStatusToStepStatus(event.runStatus) ??
-        'running';
-      setStepProgress(stepKey, nextStatus, event.text);
-    },
-    [setStepProgress],
-  );
-
-  const consumeSse = useCallback(
-    async (response: Response) => {
-      const headerReviewId = response.headers.get('X-Review-Id');
-      let activeReviewId = headerReviewId;
-      if (headerReviewId) {
-        setReviewId(headerReviewId);
-        syncReviewIdToUrl(headerReviewId);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('未获取到流式响应');
-
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        let boundaryIndex = buffer.indexOf('\n\n');
-        while (boundaryIndex !== -1) {
-          const rawEvent = buffer.slice(0, boundaryIndex);
-          buffer = buffer.slice(boundaryIndex + 2);
-          boundaryIndex = buffer.indexOf('\n\n');
-
-          if (!rawEvent.trim() || isSseHeartbeat(rawEvent)) continue;
-
-          const dataLine = rawEvent
-            .split('\n')
-            .find((line) => line.startsWith('data:'));
-          if (!dataLine) continue;
-
-          const payloadText = dataLine.replace(/^data:\s*/, '').trim();
-          let chunk: CodeReviewStreamChunk | null = null;
-
-          try {
-            chunk = JSON.parse(payloadText) as CodeReviewStreamChunk;
-          } catch {
-            continue;
-          }
-
-          if (!chunk) continue;
-
-          if ('error' in chunk && typeof chunk.error === 'string' && chunk.error) {
-            throw new Error(chunk.error);
-          }
-
-          if ('done' in chunk && chunk.done) {
-            return;
-          }
-
-          if ('type' in chunk) {
-            const typedChunk = chunk as CodeReviewStreamTypedChunk;
-            if (typedChunk.reviewId) {
-              activeReviewId = typedChunk.reviewId;
-              setReviewId(typedChunk.reviewId);
-              syncReviewIdToUrl(typedChunk.reviewId);
-            }
-            if (typedChunk.runStatus) {
-              const mappedStatus = mapRunStatus(typedChunk.runStatus);
-              if (mappedStatus !== 'idle') {
-                setReviewStatus(mappedStatus);
-              }
-            }
-            if (typedChunk.stepKey && typedChunk.stepStatus) {
-              setStepProgress(
-                typedChunk.stepKey,
-                typedChunk.stepStatus,
-                typedChunk.text,
-              );
-            }
-
-            switch (typedChunk.type) {
-              case 'plan':
-                if (typedChunk.reviewPlan) {
-                  setReviewPlan(typedChunk.reviewPlan);
-                  setStepProgress('plan', 'done', typedChunk.text || '计划已生成');
-                  addLog('plan', '收到审查计划。');
-                }
-                break;
-              case 'graph_event':
-                applyGraphEvent(typedChunk);
-                if (typedChunk.text) addLog('graph', typedChunk.text);
-                break;
-              case 'status': {
-                const stepKey =
-                  typedChunk.stepKey ??
-                  mapPhaseToProductStep(typedChunk.phase) ??
-                  mapInternalStepToProductStep(typedChunk.step);
-                const nextStatus =
-                  typedChunk.stepStatus ??
-                  mapRunStatusToStepStatus(typedChunk.runStatus) ??
-                  (typedChunk.phase === 'final' ? 'done' : 'running');
-                if (stepKey) {
-                  setStepProgress(stepKey, nextStatus, typedChunk.text);
-                }
-                if (typedChunk.text) {
-                  addLog('status', typedChunk.text);
-                  setCurrentStatus(typedChunk.text);
-                }
-                break;
-              }
-              case 'dimension_start':
-              case 'dimension_header':
-              case 'dimension_chunk':
-              case 'dimension_done':
-                setStepProgress('review', 'running', typedChunk.text || '审查分析中');
-                if (typedChunk.text) {
-                  addLog(typedChunk.type, typedChunk.text);
-                }
-                break;
-              case 'summary_header':
-              case 'summary_chunk':
-              case 'summary_done':
-                setStepProgress('summary', 'running', typedChunk.text || '生成总结中');
-                if (typedChunk.text) {
-                  addLog(typedChunk.type, typedChunk.text);
-                  setSummaryContext((prev) => `${prev}${typedChunk.text}`);
-                }
-                if (typedChunk.type === 'summary_done') {
-                  setStepProgress('summary', 'done', typedChunk.text || '总结已完成');
-                }
-                break;
-              case 'comment_status':
-                setStepProgress('pr', 'running', typedChunk.text || '创建 PR / 评论中');
-                if (typedChunk.text) {
-                  addLog('comment_status', typedChunk.text);
-                }
-                break;
-              case 'final':
-                if (typedChunk.text) {
-                  setFinalText((prev) => `${prev}${typedChunk.text}`);
-                  addLog('final', typedChunk.text);
-                }
-                if (typedChunk.runStatus === 'waiting_confirmation') {
-                  setReviewStatus('waiting_confirmation');
-                  setStepProgress('waiting', 'waiting', '等待用户确认');
-                  setCurrentStatus('首轮审查已完成，等待确认继续执行');
-                } else if (typedChunk.runStatus === 'completed') {
-                  setReviewStatus('completed');
-                  setReviewSteps((prev) =>
-                    prev ? prev.map((step) => ({ ...step, stepStatus: 'done' })) : prev,
-                  );
-                  setCurrentStepKey('pr');
-                  setCurrentStatus('审查完成');
-                } else if (typedChunk.runStatus === 'resuming') {
-                  setReviewStatus('resuming');
-                } else if (typedChunk.text) {
-                  setCurrentStatus(typedChunk.text);
-                }
-                break;
-              default:
-                break;
-            }
-          }
-        }
-      }
-
-      return activeReviewId;
-    },
-    [addLog, applyGraphEvent, setStepProgress, syncReviewIdToUrl],
-  );
-
-  const restoreReview = useCallback(
-    async (targetReviewId: string) => {
-      setIsRestoring(true);
-      setStreamError(null);
-      setPlannerError(null);
-
-      try {
-        const snapshot = await getCodeReviewRun(targetReviewId);
-        hydrateReviewSnapshot(snapshot);
-      } catch (err: any) {
-        const errorMessage = err.message || '恢复审查失败';
-        setReviewStatus('failed');
-        setStreamError(errorMessage);
-        if (hydratedReviewIdRef.current === targetReviewId) {
-          hydratedReviewIdRef.current = null;
-        }
-      } finally {
-        setIsRestoring(false);
-      }
-    },
-    [hydrateReviewSnapshot],
-  );
-
-  useEffect(() => {
-    const effectiveReviewId = queryReviewId ?? routeStateReviewId;
-    if (!isAuthenticated || !effectiveReviewId || reviewStatus === 'planning') {
+  const handleNewReview = useCallback(async () => {
+    if (isSending) {
+      abortRef.current?.abort();
       return;
     }
 
-    if (hydratedReviewIdRef.current === effectiveReviewId) {
-      return;
+    initializingReviewRef.current = true;
+    resetLocalState({ keepUrl: true });
+
+    try {
+      const newReviewId = await createReviewConversation();
+      hydratedReviewIdRef.current = newReviewId;
+      setReviewId(newReviewId);
+      syncReviewIdToUrl(newReviewId);
+      await hydrateReviewFromServer(newReviewId);
+    } catch (error: any) {
+      const errorMessage = error?.message || '创建代码审查会话失败';
+      setStreamError(errorMessage);
+      messageApi.error(errorMessage);
+    } finally {
+      initializingReviewRef.current = false;
     }
+  }, [createReviewConversation, hydrateReviewFromServer, isSending, messageApi, resetLocalState, syncReviewIdToUrl]);
 
-    void restoreReview(effectiveReviewId);
-  }, [
-    isAuthenticated,
-    queryReviewId,
-    routeStateReviewId,
-    restoreReview,
-    reviewStatus,
-  ]);
-
-  useEffect(() => {
-    const effectiveReviewId = reviewId;
-    const shouldPoll =
-      Boolean(effectiveReviewId) &&
-      ['reviewing', 'waiting_confirmation', 'resuming'].includes(reviewStatus);
-
-    if (!shouldPoll || !effectiveReviewId) {
-      return;
-    }
-
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const snapshot = await getCodeReviewRun(effectiveReviewId);
-        if (cancelled) return;
-        hydrateReviewSnapshot(snapshot, {
-          keepPlanResponse: true,
-          silent: true,
-        });
-      } catch {
-        // polling should stay silent; stream/restore already surface errors
-      }
-    };
-
-    void tick();
-    const timer = window.setInterval(() => {
-      void tick();
-    }, 5000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [hydrateReviewSnapshot, reviewId, reviewStatus]);
-
-  const planReview = useCallback(
-    async (
-      messageText: string,
-      conversationOverride?: PlanConversationMessage[],
-    ) => {
-      const text = messageText.trim();
-      if (!text) {
-        messageApi.error('请先输入审查需求');
+  const handleConfirm = useCallback(
+    async (action: CodeReviewConfirmAction) => {
+      if (!reviewId) {
+        messageApi.error('缺少 reviewId，无法继续执行');
         return;
       }
 
-      setIsPlanning(true);
-      setReviewStatus('planning');
+      if (!canConfirm) {
+        messageApi.warning('当前会话不能确认继续执行');
+        return;
+      }
+
+      setIsSending(true);
       setPlannerError(null);
       setStreamError(null);
-      resetExecutionState();
-
-      const conversation =
-        conversationOverride ?? [
-          ...planConversation,
-          {
-            role: 'user' as const,
-            content: text,
-          },
-        ];
+      setStatusText('正在继续处理...');
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       try {
-        const response = await planCodeReview({
-          message: text,
-          messages: toPlanPayloadMessages(conversation),
-          history: toPlanPayloadMessages(planConversation),
+        const response = await confirmCodeReview(
+          reviewId,
+          {
+            confirmed: true,
+            action,
+          },
+          controller.signal,
+        );
+
+        await consumeCodeReviewStream(response, {
+          signal: controller.signal,
+          onEvent: handleStreamEvent,
+          onRawLineError: (line, error) => {
+            console.warn('Invalid code review SSE frame:', line, error);
+          },
         });
 
-        setPlanConversation(conversation);
-        setPlanResponse(response);
-        setQuestions(response.questions ?? []);
-        setCurrentStatus(response.summary || '审查计划已生成');
-        setReviewSteps(null);
-        setCurrentStepKey('plan');
-
-        if (response.status === 'ready') {
-          setReviewStatus('ready_to_start');
-          messageApi.success(response.summary || '审查计划已生成');
-        } else {
-          setReviewStatus('need_clarification');
-          messageApi.warning(response.summary || '当前审查意图还需要补充信息');
+        await hydrateReviewFromServer(reviewId);
+      } catch (error: any) {
+        if (controller.signal.aborted) {
+          messageApi.info('已停止确认请求');
+          setStatusText('已停止');
+          return;
         }
-      } catch (err: any) {
-        const errorMessage = err.message || '生成计划失败';
-        setPlannerError(errorMessage);
+
+        const errorMessage = error?.message || '确认执行失败';
+        setStreamError(errorMessage);
         setReviewStatus('failed');
+        setStatusText(errorMessage);
         messageApi.error(errorMessage);
       } finally {
-        setIsPlanning(false);
+        setIsSending(false);
+        abortRef.current = null;
       }
     },
-    [messageApi, planConversation, resetExecutionState],
+    [canConfirm, handleStreamEvent, hydrateReviewFromServer, messageApi, reviewId],
   );
 
-  const continuePlanReview = useCallback(async () => {
-    const answer = clarificationAnswer.trim();
-    if (!answer) {
-      messageApi.error('请先补充信息');
-      return;
-    }
-
-    const conversation = [
-      ...planConversation,
-      {
-        role: 'assistant' as const,
-        content: questions.join('\n'),
-      },
-      {
-        role: 'user' as const,
-        content: answer,
-      },
-    ];
-
-    setClarificationAnswer('');
-    await planReview(answer, conversation);
-  }, [clarificationAnswer, messageApi, planConversation, planReview, questions]);
-
-  const startReview = useCallback(async () => {
-    if (!planResponse || planResponse.status !== 'ready' || !activeTask) {
-      messageApi.warning('请先生成可执行计划。');
-      return;
-    }
-
-    const payload: CodeReviewRequest = {
-      reviewType: activeTask.reviewType ?? 'repo',
-      owner: activeTask.owner ?? '',
-      repo: activeTask.repo ?? '',
-      branch: activeTask.branch,
-      filePath: activeTask.filePath,
-      pullNumber: activeTask.pullNumber,
-      sha: activeTask.sha,
-      applyChanges: activeTask.applyChanges,
-      createPR: activeTask.createPR,
-      autoComment: activeTask.autoComment,
-    };
-
-    setIsStreaming(true);
-    setReviewStatus('reviewing');
-    setStreamError(null);
-    setCurrentStatus('正在启动审查...');
-    resetExecutionState();
-    setStepProgress('fetch', 'running', '正在拉取代码...');
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const response = await startCodeReviewStream(payload, controller.signal);
-      const streamedReviewId = await consumeSse(response);
-
-      if (streamedReviewId) {
-        await refreshReviewSnapshot(streamedReviewId, { silent: true }).catch(
-          () => {},
-        );
+  const handleSubmit = useCallback(
+    async (event?: FormEvent) => {
+      event?.preventDefault();
+      const trimmed = draft.trim();
+      if (!trimmed) {
+        messageApi.warning('请输入审查需求');
+        return;
       }
 
-      setReviewStatus((prev) =>
-        prev === 'completed' || prev === 'waiting_confirmation'
-          ? prev
-          : 'waiting_confirmation',
-      );
-      setCurrentStatus((prev) =>
-        prev === '审查完成' ? prev : '首轮审查已结束',
-      );
-    } catch (err: any) {
-      if (controller.signal.aborted) {
-        messageApi.info('已停止审查');
-        setCurrentStatus('已停止');
-      } else {
-        const errorMessage = err.message || '审查请求失败';
-        setStreamError(errorMessage);
-        setReviewStatus('failed');
-        messageApi.error(errorMessage);
+      if (isSending) return;
+      if (reviewId && !canReply && !canConfirm) {
+        messageApi.warning('当前会话暂时不能继续输入，请先完成确认或等待审查结束。');
+        return;
       }
-    } finally {
-      setIsStreaming(false);
-      abortRef.current = null;
-    }
-  }, [
-    activeTask,
-    consumeSse,
-    messageApi,
-    planResponse,
-    resetExecutionState,
-    refreshReviewSnapshot,
-    setStepProgress,
-  ]);
 
-  const resumeReview = useCallback(async () => {
-    if (!reviewId) {
-      messageApi.error('缺少 reviewId，无法继续执行');
-      return;
-    }
+      const optimisticMessage: CodeReviewMessage = {
+        id: crypto.randomUUID(),
+        reviewId: reviewId ?? 'pending',
+        role: 'user',
+        messageType: 'text',
+        content: trimmed,
+        dataJson: buildContext(currentTask) ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMessage]);
+      setDraft('');
+      setIsSending(true);
+      setPlannerError(null);
+      setStreamError(null);
+      setReviewStatus(reviewId ? reviewStatus : 'understanding');
+      setStatusText(reviewId ? '正在发送回复...' : '正在理解你的审查需求...');
+      addLog('user', trimmed);
 
-    setIsStreaming(true);
-    setReviewStatus('resuming');
-    setStreamError(null);
-    setCurrentStatus('正在继续执行...');
-    setStepProgress('resume', 'running', '正在继续执行...');
+      if (canConfirm) {
+        await handleConfirm({ applyChanges: true, createPR: true, autoComment: false });
+        return;
+      }
 
-    const controller = new AbortController();
-    abortRef.current = controller;
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-    try {
-      const response = await continueCodeReviewStream(
-        reviewId,
-        {
+      try {
+        const payload: CodeReviewChatRequest = {
+          message: trimmed,
           reviewId,
-          resume: { confirmed: true },
-        },
-        controller.signal,
-      );
-      const streamedReviewId = await consumeSse(response);
-      const snapshotReviewId = streamedReviewId || reviewId;
-      await refreshReviewSnapshotWithRetry(snapshotReviewId, { silent: true });
-      setReviewStatus((prev) => (prev === 'failed' ? prev : 'completed'));
-      setCurrentStatus('审查完成');
-    } catch (err: any) {
-      if (controller.signal.aborted) {
-        messageApi.info('已停止继续执行');
-        setCurrentStatus('已停止');
-      } else {
-        const errorMessage = err.message || '继续执行失败';
+          context: buildContext(currentTask),
+        };
+        const response = reviewId
+          ? await replyCodeReview(reviewId, {
+              message: trimmed,
+              context: buildContext(currentTask),
+            }, controller.signal)
+          : await chatCodeReview(payload, controller.signal);
+
+        await consumeCodeReviewStream(response, {
+          signal: controller.signal,
+          onEvent: handleStreamEvent,
+          onRawLineError: (line, error) => {
+            console.warn('Invalid code review SSE frame:', line, error);
+          },
+        });
+
+        const activeReviewId = hydratedReviewIdRef.current ?? reviewId;
+        if (activeReviewId) {
+          await hydrateReviewFromServer(activeReviewId);
+        }
+      } catch (error: any) {
+        if (controller.signal.aborted) {
+          messageApi.info('已停止请求');
+          setStatusText('已停止');
+          return;
+        }
+
+        const errorMessage = error?.message || '代码审查请求失败';
         setStreamError(errorMessage);
         setReviewStatus('failed');
+        setStatusText(errorMessage);
+        addMessage({
+          reviewId: reviewId ?? 'pending',
+          role: 'assistant',
+          messageType: 'error',
+          content: errorMessage,
+          dataJson: null,
+        });
+        messageApi.error(errorMessage);
+      } finally {
+        setIsSending(false);
+        abortRef.current = null;
+      }
+    },
+    [addLog, canConfirm, canReply, currentTask, draft, handleConfirm, handleStreamEvent, hydrateReviewFromServer, isSending, messageApi, reviewId, reviewStatus],
+  );
+
+  const handleDesktopToggle = useCallback(() => {
+    setDesktopNavCollapsed((prev) => !prev);
+  }, []);
+
+  const handleMobileOpen = useCallback(() => {
+    setMobileNavOpen(true);
+  }, []);
+
+  const handleMobileClose = useCallback(() => {
+    setMobileNavOpen(false);
+  }, []);
+
+  const handleRemoveReviewConversation = useCallback(
+    async (targetReviewId: string) => {
+      try {
+        await removeReviewConversation(targetReviewId);
+        const remaining = useCodeReviewStore.getState().conversations;
+        if (
+          targetReviewId === reviewId ||
+          targetReviewId === hydratedReviewIdRef.current
+        ) {
+          if (remaining.length > 0) {
+            const nextReviewId = remaining[0].reviewId;
+            setReviewId(nextReviewId);
+            syncReviewIdToUrl(nextReviewId);
+            await hydrateReviewFromServer(nextReviewId);
+          } else {
+            initializingReviewRef.current = true;
+            try {
+              const newReviewId = await createReviewConversation();
+              setReviewId(newReviewId);
+              syncReviewIdToUrl(newReviewId);
+              await hydrateReviewFromServer(newReviewId);
+            } finally {
+              initializingReviewRef.current = false;
+            }
+          }
+        }
+      } catch (error: any) {
+        const errorMessage = error?.message || '删除代码审查会话失败';
         messageApi.error(errorMessage);
       }
-    } finally {
-      setIsStreaming(false);
-      abortRef.current = null;
-    }
-  }, [
-    consumeSse,
-    messageApi,
-    refreshReviewSnapshotWithRetry,
-    reviewId,
-    setStepProgress,
-  ]);
-
-  const recentLogs = useMemo(() => logs.slice(-20), [logs]);
-  const isReviewLocked = useMemo(
-    () =>
-      reviewStatus === 'reviewing' ||
-      reviewStatus === 'waiting_confirmation' ||
-      reviewStatus === 'resuming' ||
-      reviewStatus === 'completed',
-    [reviewStatus],
-  );
-  const executionEntries = useMemo(
-    () =>
-      [
-        generatedFix
-          ? {
-              key: 'generatedFix',
-              title: '生成修复',
-              value: generatedFix,
-            }
-          : null,
-        modificationBranch
-          ? {
-              key: 'modificationBranch',
-              title: '修改分支',
-              value: modificationBranch,
-            }
-          : null,
-        pullRequestUrl
-          ? {
-              key: 'pullRequestUrl',
-              title: 'Pull Request',
-              value: pullRequestUrl,
-              isLink: true,
-            }
-          : null,
-        finalText
-          ? {
-              key: 'finalText',
-              title: '最终结论',
-              value: finalText,
-            }
-          : null,
-      ].filter(Boolean) as Array<{
-      key: string;
-      title: string;
-      value: string;
-      isLink?: boolean;
-    }>,
-    [finalText, generatedFix, modificationBranch, pullRequestUrl],
+    },
+    [
+      createReviewConversation,
+      hydrateReviewFromServer,
+      messageApi,
+      removeReviewConversation,
+      reviewId,
+      syncReviewIdToUrl,
+    ],
   );
 
-  const dimensionEntries = useMemo(
-    () =>
-      dimensionResults.map((result, index) => {
-        const title = getDimensionTitle(result, index);
-        return {
-          key: `${title}-${index}`,
-          title,
-          value: result.content || result.summary || '后端未返回详细内容。',
-        };
-      }),
-    [dimensionResults],
-  );
-
-  const reviewPlanEntries = useMemo(
-    () =>
-      reviewPlan
-        ? [
-            reviewPlan.summary
-              ? { key: 'plan-summary', title: '计划摘要', value: reviewPlan.summary }
-              : null,
-            reviewPlan.goal
-              ? { key: 'plan-goal', title: '目标', value: reviewPlan.goal }
-              : null,
-          ].filter(Boolean) as Array<{
-            key: string;
-            title: string;
-            value: string;
-          }>
-        : [],
-    [reviewPlan],
-  );
-
-  const canContinue =
-    reviewStatus === 'waiting_confirmation' && Boolean(reviewId) && !isStreaming;
-  const canStart =
-    reviewStatus === 'ready_to_start' &&
-    planResponse?.status === 'ready' &&
-    !isStreaming;
+  const inputPlaceholder = reviewStatus === 'waiting_clarification'
+    ? '补充缺失信息，例如仓库、分支、PR 编号或文件路径'
+    : reviewStatus === 'waiting_confirmation'
+      ? '输入“继续”即可让我修改代码并创建 PR'
+      : reviewId
+        ? '继续补充审查信息，或等待后端追问'
+        : '用一句自然语言描述你想审查的代码';
 
   if (!isAuthenticated) {
     return <ConnectGithub />;
   }
 
   return (
-    <div className="code-review-page">
+    <div
+      className={`home${mobileNavOpen ? ' home--mobile-nav-open' : ''}${desktopNavCollapsed ? ' home--desktop-nav-collapsed' : ''}${sidebarTransitionEnabled ? ' home--sidebar-transition-enabled' : ''}`}
+    >
       {contextHolder}
-      <div className="code-review-page__hero">
-        <div>
-          <div className="code-review-page__eyebrow">
-            <Sparkles size={14} />
-            <span>GitHub 审查工作台</span>
-          </div>
-          <h1 className="code-review-page__title">产品化审查步骤流</h1>
-          <p className="code-review-page__subtitle">
-            前端展示面向用户的审查步骤，不再直接暴露内部 LangGraph 节点名。
-            页面刷新后可通过 `reviewId` 恢复当前进度。
-          </p>
-        </div>
-        <div className="code-review-page__hero-actions">
-          <Link to="/" className="code-review-page__ghost-button">
-            返回聊天
-          </Link>
-          <button
-            type="button"
-            className="code-review-page__ghost-button"
-            onClick={() => abortRef.current?.abort()}
-            disabled={!isStreaming}
-          >
-            <Square size={16} />
-            停止
-          </button>
-        </div>
-      </div>
+      <ReviewSessionNav
+        conversations={orderedReviewConversations}
+        mobileOpen={mobileNavOpen}
+        desktopCollapsed={desktopNavCollapsed}
+        activeReviewId={reviewId ?? hydratedReviewIdRef.current}
+        onDesktopToggle={handleDesktopToggle}
+        onMobileClose={handleMobileClose}
+        onNewReview={() => void handleNewReview()}
+        onRemove={(targetReviewId) => void handleRemoveReviewConversation(targetReviewId)}
+      />
 
-      <div className="code-review-page__layout">
-        <section className="code-review-page__panel code-review-page__panel--intent">
-          <div className="code-review-page__panel-head">
-            <div>
-              <h2>审查意图</h2>
-              <p>输入自然语言后，后端先生成计划，再启动两段式审查流程。</p>
-            </div>
-            <span
-              className={`code-review-page__panel-badge ${statusClass(reviewStatus)}`}
+      <div className="chat">
+        <header className="chat__header">
+          <div className="chat__header-main">
+            <button
+              type="button"
+              className="chat__sessions-toggle"
+              onClick={handleMobileOpen}
+              aria-label="展开审查会话列表"
             >
-              {statusLabel(reviewStatus)}
-            </span>
+              <PanelLeft size={18} />
+            </button>
+            <div className="chat__header-info">
+              <h1 className="chat__title">代码审查</h1>
+              <span className="chat__status">
+                {statusText || (reviewId ? statusLabel(reviewStatus) : '等待创建对话')}
+              </span>
+            </div>
           </div>
+          <div className="chat__header-actions">
+            <button
+              type="button"
+              className="chat__clear"
+              title="清空当前会话"
+              disabled={isSending}
+              onClick={() => void handleNewReview()}
+            >
+              <RefreshCcw size={18} />
+              <span>新对话</span>
+            </button>
+            <button
+              type="button"
+              className="chat__clear"
+              title="停止"
+              disabled={!isSending}
+              onClick={() => abortRef.current?.abort()}
+            >
+              <Square size={18} />
+              <span>停止</span>
+            </button>
+          </div>
+        </header>
 
-          <div className="code-review-page__section code-review-page__section--plan">
-            <div className="code-review-page__section-title">自然语言</div>
-              <textarea
-                className="code-review-page__prompt"
-                rows={4}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="例如：帮我审查 charles-lpd/ts-node 的 src/index.ts，重点看错误处理和边界条件。"
-                disabled={isReviewLocked}
+        <div className="chat__messages" ref={messageListRef}>
+          {messages.length === 0 && (
+            <div className="chat__empty">
+              <Sparkles size={48} className="chat__empty-icon" />
+              <h2>有什么我可以帮你审查的吗？</h2>
+              <p>发送一句自然语言开始代码审查，我会像知识库对话一样跟你来回确认。</p>
+            </div>
+          )}
+
+          {messages.map((item) => (
+            <div className="message-container" key={item.id}>
+              <MessageItem
+                role={item.role}
+                content={item.content}
+                metadata={undefined}
               />
-            <div className="code-review-page__hint">
-              此步骤仅生成计划，不会修改仓库。确认后才会进入审查和写回阶段。
+              {item.messageType !== 'text' && (
+                <div className="code-review-page__message-tag">
+                  {getMessageTitle(item)}
+                </div>
+              )}
+              {item.messageType === 'action' && canConfirm && (
+                <div className="code-review-page__confirm-card">
+                  <div>
+                    <strong>等待确认继续</strong>
+                    <span>确认后我会进入后续执行阶段；如果当前缺少可写回的文件路径，我会继续追问。</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="code-review-page__confirm-button"
+                    disabled={isSending}
+                    onClick={() => {
+                      void handleConfirm({ applyChanges: true, createPR: true, autoComment: false });
+                    }}
+                  >
+                    <CheckCircle2 size={16} />
+                    确认继续
+                  </button>
+                </div>
+              )}
             </div>
-            <div className="code-review-page__section-actions">
-              <button
-                type="button"
-                className="code-review-page__primary"
-                onClick={() => void planReview(prompt)}
-                disabled={isPlanning || !prompt.trim() || isStreaming || isReviewLocked}
-              >
-                {isPlanning ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Sparkles size={16} />
-                )}
-                <span>{isPlanning ? '规划中...' : '生成计划'}</span>
+          ))}
+
+        </div>
+
+        <div className="chat__footer">
+          <div className="chat__controls">
+            {isSending && (
+              <button className="chat__stop" onClick={() => abortRef.current?.abort()}>
+                <Square size={14} fill="currentColor" />
+                停止生成
               </button>
-              <button
-                type="button"
-                className="code-review-page__secondary"
-                onClick={resetAll}
-                disabled={isPlanning || isStreaming || isReviewLocked}
-              >
-                清空
-              </button>
-            </div>
-            {plannerError && (
-              <div className="code-review-page__alert code-review-page__alert--error">
-                <AlertCircle size={16} />
-                <span>{plannerError}</span>
-              </div>
             )}
           </div>
-
-          {reviewId && (
-            <div className="code-review-page__card">
-              <div className="code-review-page__card-title">当前审查</div>
-              <div className="code-review-page__card-text">
-                <p>Review ID: {reviewId}</p>
-                <p>任务: {describeTask(activeTask)}</p>
-              </div>
-            </div>
-          )}
-
-          {planResponse && (
-            <div className="code-review-page__card">
-              <div className="code-review-page__card-title">计划确认</div>
-              <div className="code-review-page__card-text">
-                <p>状态: {planResponse.status}</p>
-                {planResponse.summary && <p>摘要: {planResponse.summary}</p>}
-                {planResponse.missingFields?.length ? (
-                  <p>缺失字段: {planResponse.missingFields.join('，')}</p>
-                ) : null}
-                <p>任务: {describeTask(activeTask)}</p>
-                <p>可执行: {planResponse.canExecute ? '是' : '否'}</p>
-              </div>
-              {canStart && (
-                <div className="code-review-page__section-actions">
-                  <button
-                    type="button"
-                    className="code-review-page__primary"
-                    onClick={() => void startReview()}
-                    disabled={!canStart}
-                  >
-                    {isStreaming ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Play size={16} />
-                    )}
-                    <span>开始审查</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="code-review-page__secondary"
-                    onClick={() => setPlanResponse(null)}
-                    disabled={isStreaming || isReviewLocked}
-                  >
-                    <RefreshCcw size={16} />
-                    收起计划
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {reviewStatus === 'need_clarification' && (
-            <div className="code-review-page__card">
-              <div className="code-review-page__card-title">追问问题</div>
-              <div className="code-review-page__card-text">
-                {questions.length > 0 ? (
-                  questions.map((question) => <p key={question}>{question}</p>)
-                ) : (
-                  <p>后端正在请求更多信息。</p>
-                )}
-              </div>
-              <textarea
-                className="code-review-page__prompt code-review-page__prompt--compact"
-                rows={3}
-                value={clarificationAnswer}
-                onChange={(e) => setClarificationAnswer(e.target.value)}
-                placeholder="补充分支、PR 编号、文件路径等信息后继续。"
-                disabled={isStreaming || isReviewLocked}
-              />
-              <div className="code-review-page__section-actions">
-                <button
-                  type="button"
-                  className="code-review-page__primary"
-                  onClick={() => void continuePlanReview()}
-                  disabled={isPlanning || !clarificationAnswer.trim() || isStreaming || isReviewLocked}
-                >
-                  {isPlanning ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Sparkles size={16} />
-                  )}
-                  <span>{isPlanning ? '补充中...' : '补充后重新规划'}</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section className="code-review-page__panel code-review-page__panel--right">
-          <div className="code-review-page__panel-head">
-            <div>
-              <h2>当前步骤 / 确认模块</h2>
-              <p>{currentStatus}</p>
-            </div>
-            <span className="code-review-page__panel-badge code-review-page__panel-badge--muted">
-              {isRestoring ? '恢复中' : statusLabel(reviewStatus)}
-            </span>
-          </div>
-
-          {reviewStatus === 'waiting_confirmation' ? (
-            <div className="code-review-page__card code-review-page__card--stage">
-              <div className="code-review-page__card-title">执行确认</div>
-              <div className="code-review-page__card-text">
-                <p>首轮审查已结束，当前可以继续执行后半段流程。</p>
-              </div>
-              {canContinue && (
-                <div className="code-review-page__section-actions">
-                  <button
-                    type="button"
-                    className="code-review-page__primary"
-                    onClick={() => void resumeReview()}
-                  >
-                    <Play size={16} />
-                    <span>继续执行</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="code-review-page__card code-review-page__card--stage">
-              <div className="code-review-page__timeline-head">
-                <h3>当前步骤</h3>
-                <span>{currentStep?.stepLabel ?? createFallbackStepTitle(currentStepKey)}</span>
-              </div>
-              <div className="code-review-page__step-focus">
-                <div className="code-review-page__step-focus-title">
-                  {currentStep?.stepLabel ?? createFallbackStepTitle(currentStepKey)}
-                </div>
-                <div className="code-review-page__step-focus-text">
-                  {reviewStatus === 'completed'
-                    ? '审查已结束，执行结果已移至下方。'
-                    : currentStatus}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {reviewSteps && reviewId && reviewSteps.length > 0 ? (
-            <div className="code-review-page__card">
-              <div className="code-review-page__card-title">产品化步骤</div>
-              <div className="code-review-page__step-list code-review-page__step-list--scroll">
-                {reviewSteps.map((step) => (
-                  <div
-                    key={step.stepKey}
-                    className={`code-review-page__step-item${
-                      step.stepKey === currentStep?.stepKey
-                        ? ' code-review-page__step-item--active'
-                        : ''
-                    }`}
-                  >
-                    <div className="code-review-page__step-main">
-                      <div className="code-review-page__step-title-row">
-                        <span className="code-review-page__step-index">
-                          {String(step.stepIndex + 1).padStart(2, '0')}
-                        </span>
-                        <span className="code-review-page__step-label">
-                          {step.stepLabel}
-                        </span>
-                      </div>
-                      <div className="code-review-page__step-subtitle">
-                        {step.stepKey === currentStep?.stepKey
-                          ? currentStatus
-                          : step.stepStatus === 'done' || step.stepStatus === 'completed'
-                            ? '已完成'
-                            : step.stepStatus === 'waiting'
-                              ? '等待用户确认'
-                              : '等待开始'}
-                      </div>
-                    </div>
-                    <span
-                      className={`code-review-page__step-badge ${stepStatusClass(step.stepStatus)}`}
-                    >
-                      {stepStatusLabel(step.stepStatus)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="code-review-page__card">
-              <div className="code-review-page__card-title">产品化步骤</div>
-              <div className="code-review-page__empty">
-                {reviewId
-                  ? isRestoring
-                    ? '正在通过 reviewId 加载步骤列表。'
-                    : '已拿到 reviewId，等待后端返回步骤列表。'
-                  : '等待 reviewId 后展示步骤列表。'}
-              </div>
-            </div>
-          )}
-
-          {streamError && (
-            <div className="code-review-page__alert code-review-page__alert--error">
-              <AlertCircle size={16} />
-              <span>{streamError}</span>
-            </div>
-          )}
-        </section>
-      </div>
-
-      <div className="code-review-page__bottom">
-        <section className="code-review-page__panel code-review-page__panel--wide">
-          <button
-            type="button"
-            className="code-review-page__collapse-header"
-            onClick={() => togglePanel('summary')}
-            aria-expanded={isPanelOpen('summary')}
-          >
-            <div className="code-review-page__panel-head code-review-page__panel-head--compact">
-              <div>
-                <h2>审查摘要</h2>
-                <p>{reviewStatus === 'completed' ? '最终结果' : '阶段结果'}</p>
-              </div>
-            </div>
-            <ChevronDown
-              size={18}
-              className={`code-review-page__collapse-icon${
-                isPanelOpen('summary') ? ' code-review-page__collapse-icon--open' : ''
-              }`}
+          <form className="chat__form" onSubmit={(event) => {
+            void handleSubmit(event);
+          }}>
+            <textarea
+              ref={inputRef}
+              className="chat__input"
+              rows={1}
+              placeholder={inputPlaceholder}
+              value={draft}
+              disabled={isSending || (!!reviewId && !canReply && !canConfirm)}
+              onChange={(event) => {
+                const val = event.target.value;
+                setDraft(val);
+                event.target.style.height = 'auto';
+                event.target.style.height = `${Math.min(event.target.scrollHeight, 200)}px`;
+              }}
+              onCompositionStart={(event) => {
+                event.currentTarget.dataset.composing = 'true';
+              }}
+              onCompositionEnd={(event) => {
+                event.currentTarget.dataset.composing = 'false';
+              }}
+              onKeyDown={(event) => {
+                const nativeEvent = event.nativeEvent as unknown as {
+                  isComposing?: boolean;
+                };
+                if (event.key === 'Enter' && !event.shiftKey && !nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void handleSubmit();
+                }
+              }}
             />
-          </button>
-          <div
-            className={`code-review-page__collapse-panel${
-              isPanelOpen('summary') ? ' code-review-page__collapse-panel--open' : ''
-            }`}
-          >
-            <div className="code-review-page__collapse-panel-body">
-              {summaryContext || finalText ? (
-                <div className="code-review-page__final">
-                  {summaryContext || finalText}
-                </div>
-              ) : (
-                <div className="code-review-page__empty">
-                  {isRestoring ? '正在恢复审查摘要。' : '等待摘要生成。'}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="code-review-page__panel code-review-page__panel--wide">
-          <button
-            type="button"
-            className="code-review-page__collapse-header"
-            onClick={() => togglePanel('execution')}
-            aria-expanded={isPanelOpen('execution')}
-          >
-            <div className="code-review-page__panel-head code-review-page__panel-head--compact">
-              <div>
-                <h2>执行结果</h2>
-                <p>{reviewStatus === 'completed' ? '已结束' : '等待中'}</p>
-              </div>
-            </div>
-            <ChevronDown
-              size={18}
-              className={`code-review-page__collapse-icon${
-                isPanelOpen('execution') ? ' code-review-page__collapse-icon--open' : ''
-              }`}
-            />
-          </button>
-          <div
-            className={`code-review-page__collapse-panel${
-              isPanelOpen('execution') ? ' code-review-page__collapse-panel--open' : ''
-            }`}
-          >
-            <div className="code-review-page__collapse-panel-body">
-              <div className="code-review-page__result-list code-review-page__result-list--stack">
-                {executionEntries.length > 0 ? (
-                  executionEntries.map((entry) => {
-                    const panelKey = `execution:${safePanelKey(entry.key)}`;
-                    const expanded = isPanelOpen(panelKey);
-                    return (
-                      <div
-                        key={entry.key}
-                        className="code-review-page__result-item code-review-page__result-item--collapsible"
-                      >
-                        <button
-                          type="button"
-                          className="code-review-page__collapse-header code-review-page__collapse-header--inner"
-                          onClick={() => togglePanel(panelKey)}
-                          aria-expanded={expanded}
-                        >
-                          <div className="code-review-page__result-title">
-                            {entry.title}
-                          </div>
-                          <ChevronDown
-                            size={16}
-                            className={`code-review-page__collapse-icon code-review-page__collapse-icon--small${
-                              expanded ? ' code-review-page__collapse-icon--open' : ''
-                            }`}
-                          />
-                        </button>
-                        <div
-                          className={`code-review-page__collapse-panel code-review-page__collapse-panel--inner${
-                            expanded ? ' code-review-page__collapse-panel--open' : ''
-                          }`}
-                        >
-                          <div className="code-review-page__collapse-panel-body">
-                            {entry.isLink ? (
-                              <a
-                                className="code-review-page__result-link"
-                                href={entry.value}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <span>{entry.value}</span>
-                                <ExternalLink size={14} />
-                              </a>
-                            ) : (
-                              <div className="code-review-page__result-text">
-                                {entry.value}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="code-review-page__empty">
-                    {reviewStatus === 'completed'
-                      ? '等待执行结果恢复。'
-                      : '等待执行完成后展示。'}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="code-review-page__panel code-review-page__panel--wide">
-          <button
-            type="button"
-            className="code-review-page__collapse-header"
-            onClick={() => togglePanel('plan')}
-            aria-expanded={isPanelOpen('plan')}
-          >
-            <div className="code-review-page__panel-head code-review-page__panel-head--compact">
-              <div>
-                <h2>计划与维度</h2>
-                <p>{dimensionResults.length} 个维度</p>
-              </div>
-            </div>
-            <ChevronDown
-              size={18}
-              className={`code-review-page__collapse-icon${
-                isPanelOpen('plan') ? ' code-review-page__collapse-icon--open' : ''
-              }`}
-            />
-          </button>
-          <div
-            className={`code-review-page__collapse-panel${
-              isPanelOpen('plan') ? ' code-review-page__collapse-panel--open' : ''
-            }`}
-          >
-            <div className="code-review-page__collapse-panel-body">
-              <div className="code-review-page__result-list code-review-page__result-list--stack">
-                {reviewPlanEntries.length > 0 && (
-                  <div className="code-review-page__result-item code-review-page__result-item--collapsible">
-                    <button
-                      type="button"
-                      className="code-review-page__collapse-header code-review-page__collapse-header--inner"
-                      onClick={() => togglePanel('plan:overview')}
-                      aria-expanded={isPanelOpen('plan:overview')}
-                    >
-                      <div className="code-review-page__result-title">计划概览</div>
-                      <ChevronDown
-                        size={16}
-                        className={`code-review-page__collapse-icon code-review-page__collapse-icon--small${
-                          isPanelOpen('plan:overview')
-                            ? ' code-review-page__collapse-icon--open'
-                            : ''
-                        }`}
-                      />
-                    </button>
-                    <div
-                      className={`code-review-page__collapse-panel code-review-page__collapse-panel--inner${
-                        isPanelOpen('plan:overview')
-                          ? ' code-review-page__collapse-panel--open'
-                          : ''
-                      }`}
-                    >
-                      <div className="code-review-page__collapse-panel-body">
-                        <div className="code-review-page__result-list code-review-page__result-list--stack">
-                          {reviewPlanEntries.map((entry) => (
-                            <div key={entry.key} className="code-review-page__result-item">
-                              <div className="code-review-page__result-title">
-                                {entry.title}
-                              </div>
-                              <div className="code-review-page__result-text">
-                                {entry.value}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {dimensionEntries.length > 0 ? (
-                  dimensionEntries.map((entry) => {
-                    const panelKey = `dimension:${safePanelKey(entry.key)}`;
-                    const expanded = isPanelOpen(panelKey);
-                    return (
-                      <div
-                        key={entry.key}
-                        className="code-review-page__result-item code-review-page__result-item--collapsible"
-                      >
-                        <button
-                          type="button"
-                          className="code-review-page__collapse-header code-review-page__collapse-header--inner"
-                          onClick={() => togglePanel(panelKey)}
-                          aria-expanded={expanded}
-                        >
-                          <div className="code-review-page__result-title">
-                            {entry.title}
-                          </div>
-                          <ChevronDown
-                            size={16}
-                            className={`code-review-page__collapse-icon code-review-page__collapse-icon--small${
-                              expanded ? ' code-review-page__collapse-icon--open' : ''
-                            }`}
-                          />
-                        </button>
-                        <div
-                          className={`code-review-page__collapse-panel code-review-page__collapse-panel--inner${
-                            expanded ? ' code-review-page__collapse-panel--open' : ''
-                          }`}
-                        >
-                          <div className="code-review-page__collapse-panel-body">
-                            <div className="code-review-page__result-text">
-                              {entry.value}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="code-review-page__empty">等待维度审查结果。</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <section className="code-review-page__panel code-review-page__panel--wide code-review-page__panel--log">
-        <div className="code-review-page__panel-head">
-          <div>
-            <h2>流式日志</h2>
-            <p>{recentLogs.length} 条</p>
-          </div>
+            <button
+              type="submit"
+              className="chat__send"
+              disabled={!draft.trim() || isSending || (!!reviewId && !canReply && !canConfirm)}
+            >
+              <Send size={20} />
+            </button>
+          </form>
         </div>
-        <div className="code-review-page__log-list code-review-page__log-list--wide">
-          {recentLogs.length === 0 ? (
-            <div className="code-review-page__empty">等待 SSE 输出。</div>
-          ) : (
-            recentLogs.map((log) => (
-              <div key={log.id} className="code-review-page__log-item">
-                <span className="code-review-page__log-kind">{log.kind}</span>
-                <span className="code-review-page__log-text">{log.text}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+
+        {(plannerError || streamError) && (
+          <div className="chat__error" role="alert">
+            <AlertCircle size={16} />
+            <span>{plannerError || streamError}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
+function snapshotCanReply(status: CodeReviewRunStatus) {
+  if (status === 'waiting_confirmation' || status === 'reviewing' || status === 'executing_followup' || status === 'completed') {
+    return false;
+  }
+  return true;
+}
+
+function snapshotCanConfirm(status: CodeReviewRunStatus) {
+  return status === 'waiting_confirmation';
+}
+
+export default memo(CodeReviewPageBase);

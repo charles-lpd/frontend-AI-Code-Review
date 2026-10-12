@@ -7,7 +7,7 @@ const Home = lazy(() => import('./pages/Home'));
 const Profile = lazy(() => import('./pages/Profile'));
 const ChatDetail = lazy(() => import('./pages/ChatDetail'));
 const PublicSession = lazy(() => import('./pages/PublicSession'));
-// const CodeReview = lazy(() => import('./pages/CodeReview'));
+const CodeReview = lazy(() => import('./pages/CodeReview'));
 // const AgentPage = lazy(() => import('./pages/Agent'));
 const ImageGeneration = lazy(() => import('./pages/ImageGeneration'));
 const VideoGeneration = lazy(() => import('./pages/VideoGeneration'));
@@ -25,7 +25,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/chat/:sessionId" element={<Home />} />
         <Route path="/profile" element={<Profile />} />
-        {/* <Route path="/code-review" element={<CodeReview />} /> */}
+        <Route path="/code-review" element={<CodeReview />} />
+        <Route path="/code-review/:reviewId" element={<CodeReview />} />
         {/* <Route path="/agent" element={<Agen。tPage />} /> */}
         {/* <Route path="/agent/:runId" element={<AgentPage />} /> */}
         <Route path="/image-generation" element={<ImageGeneration />} />
@@ -49,18 +50,17 @@ export default function App() {
             end
             className={({ isActive }) =>
               `nav__tab${isActive ? ' nav__tab--active' : ''}`
-            }
-            >
+            }>
             对话
           </NavLink>
-          {/* <NavLink
+          <NavLink
             to="/code-review"
             className={({ isActive }) =>
               `nav__tab${isActive ? ' nav__tab--active' : ''}`
             }
           >
             审查
-          </NavLink> */}
+          </NavLink>
           {/* <NavLink
             to="/agent"
             className={({ isActive }) =>
