@@ -1,5 +1,5 @@
 
-export const isProd = window.location.host.includes('aqiong.xyz')
+export const isProd = window.location.host.includes('aqiong.xyz') || window.location.host.includes('4everland.app')
 
 export const BACKEND_API_BASE_URL = isProd ? 'https://www.adongdong.xyz/api' : 'http://localhost:3000/api';
 
