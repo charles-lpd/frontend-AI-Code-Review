@@ -1,4 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ui/popover';
+import { Button } from '@/ui/button';
+import { Badge } from '@/ui/badge';
+import { useState, useEffect } from 'react';
 import { githubApi, type GithubRepo } from '../../api/github';
 import { Code, ExternalLink, Loader2, AlertCircle, GitBranch } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -14,32 +17,11 @@ export default function RepoSelector({ onSelect }: RepoSelectorProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen && repos.length === 0) {
       fetchRepos();
     }
-  }, [isOpen]);
-
-  // 点击外部关闭弹窗
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
   }, [isOpen]);
 
   const fetchRepos = async () => {
@@ -64,9 +46,9 @@ export default function RepoSelector({ onSelect }: RepoSelectorProps) {
       <div className="repo-error">
         <GitBranch size={16} />
         <span>请先连接 GitHub</span>
-        <button onClick={login} className="install-link">
+        <Button variant="outline" onClick={login} className="install-link">
           连接
-        </button>
+        </Button>
       </div>
     );
   }
@@ -89,22 +71,20 @@ export default function RepoSelector({ onSelect }: RepoSelectorProps) {
   }
 
   return (
-    <div className="repo-selector" ref={containerRef}>
-      <button
+    <Popover open={isOpen} onOpenChange={setIsOpen}><div className="repo-selector">
+      <PopoverTrigger asChild><Button variant="outline"
         className="repo-selector__trigger"
-        onClick={() => setIsOpen(!isOpen)}
       >
         <Code size={16} />
         <span>选择仓库进行审查</span>
-      </button>
+      </Button></PopoverTrigger>
 
-      {isOpen && (
-        <div className="repo-selector__dropdown">
+        <PopoverContent className="repo-selector__dropdown w-[min(28rem,calc(100vw-2rem))] p-0" aria-label="您的 GitHub 仓库">
           <div className="repo-selector__header">
             <h3>您的 GitHub 仓库</h3>
-            <button onClick={() => fetchRepos()} disabled={loading}>
+            <Button variant="outline" onClick={() => fetchRepos()} disabled={loading}>
               刷新
-            </button>
+            </Button>
           </div>
 
           <div className="repo-selector__list">
@@ -115,10 +95,8 @@ export default function RepoSelector({ onSelect }: RepoSelectorProps) {
               </div>
             ) : repos.length > 0 ? (
               repos.map((repo) => (
-                <div
-                  key={repo.id}
-                  className="repo-item"
-                  onClick={() => {
+                <div key={repo.id} className="repo-item">
+                <Button variant="ghost" className="min-w-0 flex-1 justify-start" onClick={() => {
                     onSelect(repo);
                     setIsOpen(false);
                   }}
@@ -126,10 +104,11 @@ export default function RepoSelector({ onSelect }: RepoSelectorProps) {
                   <div className="repo-item__info">
                     <span className="repo-item__name">{repo.fullName}</span>
                     {repo.isPrivate && (
-                      <span className="repo-item__badge">Private</span>
+                      <Badge className="repo-item__badge">Private</Badge>
                     )}
                   </div>
-                  <a
+                </Button><a
+                    aria-label={`打开仓库 ${repo.fullName}`}
                     href={`https://github.com/${repo.fullName}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -143,8 +122,7 @@ export default function RepoSelector({ onSelect }: RepoSelectorProps) {
               <div className="repo-selector__empty">没有找到可用的仓库</div>
             )}
           </div>
-        </div>
-      )}
-    </div>
+        </PopoverContent>
+    </div></Popover>
   );
 }

@@ -1,3 +1,8 @@
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/ui/tabs';
+import { Avatar, AvatarImage, AvatarFallback } from '@/ui/avatar';
+import { Card } from '@/ui/card';
+import { Badge } from '@/ui/badge';
+import { Button } from '@/ui/button';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
@@ -128,39 +133,35 @@ export default function Profile() {
   return (
     <div className="profile">
       <div className="profile__header">
-        <div className="profile__user-card">
-          <img
-            src={user.avatarUrl}
-            alt={user.name}
-            className="profile__avatar"
-          />
+        <Card className="profile__user-card">
+<Avatar className="profile__avatar"><AvatarImage src={user.avatarUrl} alt={user.name || user.login} /><AvatarFallback>{(user.name || user.login).slice(0, 1)}</AvatarFallback></Avatar>
           <div className="profile__user-info">
             <h1 className="profile__name">{user.name || user.login}</h1>
             <p className="profile__login">@{user.login}</p>
             <div className="profile__badges">
-              <span className="profile__badge">
+              <Badge className="profile__badge">
                 <User size={12} />
                 GitHub ID: {user.githubId}
-              </span>
+              </Badge>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       <div className="profile__content">
-        <section className="profile__panel">
+        <Card className="profile__panel">
           <div className="profile__section-header">
             <div className="profile__section-title">
               <MessageSquare size={20} />
               <h2>我的会话 ({sessions.length})</h2>
             </div>
-            <button
+            <Button variant="outline"
               className="profile__refresh"
               onClick={() => void handleCreateSession()}
               disabled={creatingSession}
             >
               {creatingSession ? '创建中...' : '新建会话'}
-            </button>
+            </Button>
           </div>
 
           {sessions.length === 0 ? (
@@ -200,37 +201,25 @@ export default function Profile() {
               })}
             </div>
           )}
-        </section>
+        </Card>
 
-        <section className="profile__panel">
+        <Card className="profile__panel"><Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ProfileTab)}>
           <div className="profile__tabs-header">
-            <div className="profile__tabs" role="tablist" aria-label="个人资源">
-              <button
-                type="button"
-                className={`profile__tab${activeTab === 'repos' ? ' profile__tab--active' : ''}`}
-                onClick={() => setActiveTab('repos')}
-              >
+            <TabsList aria-label="个人资源" className="max-w-full overflow-x-auto">
+              <TabsTrigger value="repos">
                 <Code size={16} />
                 仓库 ({repos.length})
-              </button>
-              <button
-                type="button"
-                className={`profile__tab${activeTab === 'images' ? ' profile__tab--active' : ''}`}
-                onClick={() => setActiveTab('images')}
-              >
+              </TabsTrigger>
+              <TabsTrigger value="images">
                 <ImageIcon size={16} />
                 图片 ({imageRuns.length})
-              </button>
-              <button
-                type="button"
-                className={`profile__tab${activeTab === 'videos' ? ' profile__tab--active' : ''}`}
-                onClick={() => setActiveTab('videos')}
-              >
+              </TabsTrigger>
+              <TabsTrigger value="videos">
                 <Video size={16} />
                 视频 ({videoRuns.length})
-              </button>
-            </div>
-            <button
+              </TabsTrigger>
+            </TabsList>
+            <Button variant="outline"
               className="profile__refresh"
               onClick={activeTab === 'repos' ? fetchRepos : fetchGenerationRuns}
               disabled={activeTab === 'repos' ? loading : generationLoading}
@@ -240,7 +229,7 @@ export default function Profile() {
               ) : (
                 '刷新列表'
               )}
-            </button>
+            </Button>
           </div>
 
           {error && (
@@ -249,7 +238,7 @@ export default function Profile() {
             </div>
           )}
 
-          {activeTab === 'repos' && (
+          <TabsContent value="repos">
             <div className="profile__repo-grid">
               {loading && repos.length === 0 ? (
                 <div className="profile__loading">
@@ -262,14 +251,14 @@ export default function Profile() {
                 </div>
               ) : (
                 repos.map((repo) => (
-                  <div key={repo.id} className="repo-card">
+                  <Card key={repo.id} className="repo-card">
                     <div className="repo-card__header">
                       <h3 className="repo-card__name">{repo.fullName}</h3>
                       {repo.isPrivate && (
-                        <span className="repo-card__private-badge whitespace-nowrap">
+                        <Badge className="repo-card__private-badge whitespace-nowrap">
                           <Shield size={10} />
                           私有
-                        </span>
+                        </Badge>
                       )}
                     </div>
                     <p className="repo-card__desc">
@@ -296,30 +285,30 @@ export default function Profile() {
                         查看
                       </a>
                     </div>
-                  </div>
+                  </Card>
                 ))
               )}
             </div>
-          )}
+          </TabsContent>
 
-          {activeTab === 'images' && (
+          <TabsContent value="images">
             <GenerationRunGrid
               emptyText="暂无图片生成记录。"
               isLoading={generationLoading}
               runs={imageRuns}
               toPath={(runId) => `/image-generation/${runId}`}
             />
-          )}
+          </TabsContent>
 
-          {activeTab === 'videos' && (
+          <TabsContent value="videos">
             <GenerationRunGrid
               emptyText="暂无视频生成记录。"
               isLoading={generationLoading}
               runs={videoRuns}
               toPath={(runId) => `/video-generation/${runId}`}
             />
-          )}
-        </section>
+          </TabsContent>
+        </Tabs></Card>
       </div>
     </div>
   );

@@ -1,8 +1,28 @@
 /** 消息发送方 */
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
+export type ChatMode = 'auto' | 'direct' | 'knowledge' | 'assistant';
+export type KnowledgeFileStatus = 'pending' | 'processing' | 'ready' | 'failed';
+export type KnowledgeReadiness = 'empty' | 'indexing' | 'ready' | 'mixed' | 'failed';
+export type ApiErrorCode =
+  | 'INVALID_REQUEST' | 'SESSION_NOT_FOUND' | 'SESSION_ACCESS_DENIED'
+  | 'PUBLIC_SESSION_NOT_FOUND' | 'KNOWLEDGE_NOT_READY' | 'KNOWLEDGE_INDEX_FAILED'
+  | 'EMBEDDING_UNAVAILABLE' | 'EMBEDDING_DIMENSION_MISMATCH' | 'LLM_UNAVAILABLE'
+  | 'LLM_TIMEOUT' | 'TOOL_FAILED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'
+  | 'CHAT_IN_PROGRESS' | 'IDEMPOTENCY_CONFLICT' | 'CHAT_RETRY_CONFLICT';
+
+export interface Citation {
+  citationId: string;
+  fileId: string;
+  fileName: string;
+  chunkIndex: number;
+  chunkStart: number;
+  chunkEnd: number;
+  score: number;
+}
 
 /** 消息状态 */
-export type MessageStatus = 'pending' | 'sending' | 'error' | 'success';
+export type MessageStatus = 'pending' | 'sending' | 'error' | 'success'
+  | 'generating' | 'completed' | 'failed' | 'aborted';
 
 export interface SessionKnowledgeFile {
   id: string;
@@ -10,21 +30,26 @@ export interface SessionKnowledgeFile {
   size: number;
   type: string;
   uploadedAt: number;
-  indexStatus?: 'pending' | 'ready' | 'failed';
+  indexStatus: KnowledgeFileStatus;
+  errorMessage: string | null;
+  /** @deprecated backend used this name in older responses */
   indexError?: string | null;
 }
 
 export interface SessionManageConfig {
   title?: string;
-  isPublic?: boolean;
-  systemPrompt?: string;
-  knowledgeFiles?: SessionKnowledgeFile[];
+  isPublic: boolean;
+  systemPrompt: string;
+  chatMode: ChatMode;
+  knowledgeReadiness: KnowledgeReadiness;
+  knowledgeFiles: SessionKnowledgeFile[];
 }
 
 export interface PublicSessionInfo {
   id: string;
   title: string;
   isPublic: boolean;
+  chatMode: ChatMode;
   createdAt: number;
   warning: string | null;
   manageConfig: SessionManageConfig;
@@ -65,8 +90,8 @@ export interface KnowledgeAgentStep {
   stepStatus: KnowledgeAgentStepStatus;
   stepIndex: number;
   stepTotal: number;
-  seq: number;
-  timestamp: string;
+  seq?: number;
+  timestamp?: string;
   durationMs?: number;
   message?: string;
 }
@@ -74,7 +99,11 @@ export interface KnowledgeAgentStep {
 export interface KnowledgeAgentStreamState {
   answer: string;
   steps: Record<string, KnowledgeAgentStep>;
-  status: 'idle' | 'running' | 'completed' | 'failed';
+  status: 'idle' | 'connecting' | 'retrieving' | 'generating' | 'completed' | 'failed' | 'aborted';
+  executionMode?: ChatMode;
+  requestId?: string;
+  citations: Citation[];
+  errorCode?: ApiErrorCode;
   error?: string;
 }
 
@@ -135,13 +164,15 @@ export interface ChatMessage {
   content: string;
   /** 状态标识，用于 UI 显示等待、错误等 */
   status?: MessageStatus;
+  clientMessageId?: string | null;
+  replyToMessageId?: string | null;
   /** 工具调用（Assistant 发出） */
   tool_calls?: ToolCall[];
   /** 工具响应 ID（Tool 角色必须提供） */
   tool_call_id?: string;
   /** 扩展元数据，例如知识库引用、搜索结果等 */
   metadata?: {
-    citations?: string[];
+    citations?: Citation[];
     thought?: string; // 思维链
     reviewStream?: ReviewStreamMetadata;
     knowledgeAgent?: KnowledgeAgentStreamState;
@@ -154,11 +185,16 @@ export interface ChatMessage {
 export interface ChatSession {
   id: string;
   title: string;
+  chatMode?: ChatMode;
+  userId?: string;
+  isPublic?: boolean;
+  systemPrompt?: string | null;
+  createdAt?: string | number;
   messages: ChatMessage[];
   draft: string;
   updatedAt: number;
   /** 会话摘要，用于展示长对话背景 */
-  summary?: string;
+  summary?: string | null;
   /** 是否已加载详情（至少加载了第一页） */
   detailsLoaded?: boolean;
   /** 是否还有更多历史记录 */

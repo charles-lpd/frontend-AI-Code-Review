@@ -1,3 +1,4 @@
+import { Button } from '@/ui/button';
 import { ChevronDown, ExternalLink } from 'lucide-react';
 import { memo, useState } from 'react';
 import type { AgentArtifactCardProps } from '../../types/agent';
@@ -27,7 +28,7 @@ function AgentArtifactCardBase({
   return (
     <div className="agent-page__artifact-card">
       <div className="agent-page__artifact-head">
-        <button
+        <Button variant="ghost"
           type="button"
           className="agent-page__artifact-toggle"
           onClick={() => setIsExpanded((prev) => !prev)}
@@ -47,7 +48,7 @@ function AgentArtifactCardBase({
               isExpanded ? ' agent-page__collapse-icon--open' : ''
             }`}
           />
-        </button>
+        </Button>
 
         <div className="agent-page__artifact-actions">
           {url && (
@@ -63,13 +64,13 @@ function AgentArtifactCardBase({
             </a>
           )}
           {onCopy && (
-            <button
+            <Button variant="ghost"
               type="button"
               className="agent-page__artifact-copy"
               onClick={onCopy}
             >
               复制
-            </button>
+            </Button>
           )}
         </div>
       </div>

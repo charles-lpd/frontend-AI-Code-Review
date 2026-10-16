@@ -1,3 +1,5 @@
+import { Textarea } from '@/ui/textarea';
+import { Button } from '@/ui/button';
 import { Loader2, Play } from 'lucide-react';
 import { memo, useState } from 'react';
 import type { AgentInputBarProps } from '../../types/agent';
@@ -62,7 +64,7 @@ function AgentInputBarBase({
       </div>
 
       <div className="agent-page__input-box">
-        <textarea
+        <Textarea
           className="agent-page__textarea"
           rows={4}
           value={value}
@@ -80,7 +82,7 @@ function AgentInputBarBase({
         />
 
         <div className="agent-page__input-actions">
-          <button
+          <Button
             type="button"
             className="agent-page__primary-button"
             onClick={onSubmit}
@@ -88,27 +90,27 @@ function AgentInputBarBase({
           >
             {disabled ? <Loader2 size={16} className="agent-page__spin" /> : <Play size={16} />}
             {mode === 'confirm' ? '继续执行' : mode === 'clarify' ? '提交回答' : '开始执行'}
-          </button>
+          </Button>
 
           <div className="agent-page__input-actions-secondary">
             {onConfirm && (
-              <button
+              <Button variant="outline"
                 type="button"
                 className="agent-page__secondary-button"
                 onClick={onConfirm}
                 disabled={disabled || mode !== 'confirm'}
               >
                 确认继续
-              </button>
+              </Button>
             )}
             {onCancel && (
-              <button
+              <Button variant="outline"
                 type="button"
                 className="agent-page__secondary-button"
                 onClick={onCancel}
               >
                 取消
-              </button>
+              </Button>
             )}
           </div>
         </div>

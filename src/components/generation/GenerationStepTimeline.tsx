@@ -1,3 +1,5 @@
+import { Card } from '@/ui/card';
+import { Badge } from '@/ui/badge';
 import { memo, useMemo } from 'react';
 import {
   CheckCircle2,
@@ -54,13 +56,13 @@ function GenerationStepTimelineBase({ steps, currentStep, title, subtitle }: Gen
   const orderedSteps = useMemo(() => [...steps].sort((a, b) => a.stepIndex - b.stepIndex), [steps]);
 
   return (
-    <section className="generation-page__card generation-page__timeline">
+    <Card className="generation-page__card generation-page__timeline">
       <div className="generation-page__card-head">
         <div>
           <h2 className="generation-page__card-title">{title}</h2>
           {subtitle && <p className="generation-page__card-subtitle">{subtitle}</p>}
         </div>
-        <span className="generation-page__badge">{orderedSteps.length} 步</span>
+        <Badge className="generation-page__badge">{orderedSteps.length} 步</Badge>
       </div>
       <div className="generation-page__timeline-list">
         {orderedSteps.length > 0 ? (
@@ -99,7 +101,7 @@ function GenerationStepTimelineBase({ steps, currentStep, title, subtitle }: Gen
           <div className="generation-page__empty-note">等待任务流返回步骤。</div>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 

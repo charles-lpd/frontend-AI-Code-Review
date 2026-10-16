@@ -1,3 +1,4 @@
+@layer components {
 .home {
   display: flex;
   flex-direction: row;
@@ -6,8 +7,7 @@
   min-height: 0;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(248, 250, 252, 0.9)),
-    radial-gradient(circle at top, rgba(16, 163, 127, 0.06), transparent 34%);
+    hsl(var(--background));
 }
 
 .home > :last-child {
@@ -19,14 +19,9 @@
 @media (max-width: 480px) {
   .home {
     position: relative;
-    background: #f8fafc;
+    background: hsl(var(--background));
   }
 
-  .home--mobile-nav-open::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.22);
-    z-index: 50;
-  }
+}
+
 }

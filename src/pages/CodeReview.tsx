@@ -1,3 +1,11 @@
+import { createTextStreamRuntime } from '@/services/textStreamRuntime';
+import { useChatScroll } from '@/hooks/useChatScroll';
+import { useWorkspaceSidebar } from '@/hooks/useWorkspaceSidebar';
+import { WorkspaceSessionRow, WorkspaceSidebar, WorkspaceConfirmCard, WorkspaceEmpty } from '@/components/workspace/workspace';
+import { Button } from '@/ui/button';
+import { Badge } from '@/ui/badge';
+import { WorkspaceHeader, WorkspaceMessages, WorkspaceComposer, WorkspaceError } from '@/components/workspace/workspace';
+import { Textarea } from '@/ui/textarea';
 import {
   memo,
   useCallback,
@@ -7,19 +15,16 @@ import {
   useState,
   type FormEvent,
 } from 'react';
-import { message } from 'antd';
+import { toast as messageApi } from 'sonner';
 import { NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
   PanelLeft,
-  PanelRightClose,
   RefreshCcw,
-  Plus,
   Square,
   Sparkles,
   Send,
-  X,
 } from 'lucide-react';
 import ConnectGithub from '../components/ConnectGithub';
 import MessageItem from '../components/chat/MessageItem/MessageItem';
@@ -41,7 +46,7 @@ import type {
 import './CodeReview.css';
 import './Home.css';
 import '../components/chat/ChatPanel.css';
-import '../components/chat/ChatSessionNav.css';
+
 
 type ReviewDimensionResult = {
   name?: string;
@@ -52,17 +57,9 @@ type ReviewDimensionResult = {
   [key: string]: unknown;
 };
 
-const DESKTOP_NAV_COLLAPSED_KEY = 'code-review.desktopNavCollapsed';
-const MOBILE_NAV_OPEN_KEY = 'code-review.mobileNavOpen';
-const DESKTOP_MEDIA_QUERY = '(min-width: 1025px)';
 
-function readStoredBoolean(key: string, fallback = false) {
-  if (typeof window === 'undefined') return fallback;
-  const value = window.localStorage.getItem(key);
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return fallback;
-}
+
+
 
 function statusLabel(status?: string) {
   switch (status) {
@@ -152,6 +149,7 @@ interface ReviewSessionNavProps {
   onMobileClose: () => void;
   onNewReview: () => void;
   onRemove: (reviewId: string) => void;
+  mobileTriggerRef: import('react').RefObject<HTMLButtonElement | null>;
 }
 
 const ReviewSessionNav = memo(function ReviewSessionNav({
@@ -163,58 +161,20 @@ const ReviewSessionNav = memo(function ReviewSessionNav({
   onMobileClose,
   onNewReview,
   onRemove,
+  mobileTriggerRef,
 }: ReviewSessionNavProps) {
   return (
-    <>
-      {mobileOpen && (
-        <button
-          type="button"
-          className="session-nav__overlay"
-          aria-label="关闭审查列表遮罩"
-          onClick={onMobileClose}
-        />
-      )}
-
-      <aside
-        className={`session-nav${mobileOpen ? ' session-nav--mobile-open' : ''}${desktopCollapsed ? ' session-nav--desktop-collapsed' : ''}`}
-      >
-        <div className="session-nav__desktop-header">
-          <button
-            type="button"
-            className="session-nav__desktop-toggle"
-            onClick={onDesktopToggle}
-            aria-label={desktopCollapsed ? '展开侧边栏' : '收起侧边栏'}
-          >
-            {desktopCollapsed ? <PanelLeft size={18} /> : <PanelRightClose size={18} />}
-          </button>
-        </div>
-
-        <div className="session-nav__mobile-header">
-          <div className="session-nav__mobile-brand">Code Review</div>
-          <button
-            type="button"
-            className="session-nav__mobile-close flex justify-center items-center"
-            onClick={onMobileClose}
-            aria-label="关闭审查列表"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <button
-          type="button"
-          className={`session-nav__new${desktopCollapsed && !mobileOpen ? ' session-nav__new--icon' : ''}`}
-          onClick={onNewReview}
-          aria-label="新建审查"
-          title="新建审查"
-        >
-          {desktopCollapsed && !mobileOpen ? <Plus size={18} /> : '+ 新审查'}
-        </button>
-
+    <WorkspaceSidebar mobileTriggerRef={mobileTriggerRef} title="Code Review" newLabel="新审查" mobileOpen={mobileOpen} desktopCollapsed={desktopCollapsed} onDesktopToggle={onDesktopToggle} onMobileClose={onMobileClose} onNew={onNewReview}>
         <ul className="session-nav__list">
           {conversations.map((conversation) => (
             <li key={conversation.reviewId}>
-              <NavLink
+<WorkspaceSessionRow deleteAction={conversations.length > 1 ? (
+                  <Button variant="ghost" type="button" className="session-nav__delete" title="删除会话" aria-label={`删除会话：${conversation.title}`} onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onRemove(conversation.reviewId);
+                  }}><span aria-hidden="true">×</span></Button>
+                ) : undefined}><NavLink
                 to={`/code-review/${conversation.reviewId}`}
                 className={({ isActive }) =>
                   `session-nav__item${isActive || conversation.reviewId === activeReviewId ? ' session-nav__item--active' : ''}`
@@ -222,29 +182,14 @@ const ReviewSessionNav = memo(function ReviewSessionNav({
                 onClick={onMobileClose}
               >
                 <span className="session-nav__title">{conversation.title}</span>
-                <span className="session-nav__badge">
+                <Badge className="session-nav__badge">
                   {statusLabel(conversation.status)}
-                </span>
-                {conversations.length > 1 && (
-                  <button
-                    type="button"
-                    className="session-nav__delete flex justify-center items-center"
-                    title="删除会话"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onRemove(conversation.reviewId);
-                    }}
-                  >
-                    ×
-                  </button>
-                )}
-              </NavLink>
+                </Badge>
+</NavLink></WorkspaceSessionRow>
             </li>
           ))}
         </ul>
-      </aside>
-    </>
+    </WorkspaceSidebar>
   );
 });
 
@@ -292,16 +237,8 @@ function CodeReviewPageBase() {
     return routeReviewId ?? params.get('reviewId') ?? routeStateReviewId ?? null;
   }, [location.search, routeStateReviewId, routeReviewId]);
 
-  const [mobileNavOpen, setMobileNavOpen] = useState(() =>
-    readStoredBoolean(MOBILE_NAV_OPEN_KEY),
-  );
-  const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(() =>
-    readStoredBoolean(DESKTOP_NAV_COLLAPSED_KEY),
-  );
-  const [sidebarTransitionEnabled, setSidebarTransitionEnabled] =
-    useState(false);
+  const { mobileNavOpen, desktopNavCollapsed, sidebarTransitionEnabled, mobileTriggerRef, handleDesktopToggle, handleMobileOpen, handleMobileClose } = useWorkspaceSidebar('code-review');
 
-  const [messageApi, contextHolder] = message.useMessage();
   const [draft, setDraft] = useState('');
   const [reviewId, setReviewId] = useState<string | null>(initialReviewId);
   const [reviewStatus, setReviewStatus] = useState<CodeReviewRunStatus>('idle');
@@ -338,6 +275,20 @@ function CodeReviewPageBase() {
   const hydratedReviewIdRef = useRef<string | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const textRuntimeRef = useRef<ReturnType<typeof createTextStreamRuntime> | null>(null);
+  const { showLatest, scrollToLatest } = useChatScroll(messageListRef, reviewId ?? undefined, messages);
+  const finishText = useCallback(() => {
+    textRuntimeRef.current?.finish();
+    textRuntimeRef.current = null;
+  }, []);
+  useEffect(() => () => { abortRef.current?.abort(); abortRef.current = null; finishText(); }, [finishText]);
+  const routeIdentityRef = useRef(initialReviewId);
+  useEffect(() => {
+    if (routeIdentityRef.current !== initialReviewId && initialReviewId !== hydratedReviewIdRef.current) {
+      abortRef.current?.abort(); abortRef.current = null; finishText(); setIsSending(false);
+    }
+    routeIdentityRef.current = initialReviewId;
+  }, [initialReviewId, finishText]);
 
   const canReply = useMemo(
     () => (reviewId ? snapshotCanReply(reviewStatus) : true),
@@ -360,44 +311,7 @@ function CodeReviewPageBase() {
     [currentStep, messages, reviewStatus, statusText],
   );
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(MOBILE_NAV_OPEN_KEY, String(mobileNavOpen));
-  }, [mobileNavOpen]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(
-      DESKTOP_NAV_COLLAPSED_KEY,
-      String(desktopNavCollapsed),
-    );
-  }, [desktopNavCollapsed]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    let frameId = window.requestAnimationFrame(() => {
-      setSidebarTransitionEnabled(true);
-    });
-
-    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
-    const handleChange = (event: MediaQueryListEvent) => {
-      setSidebarTransitionEnabled(false);
-      setMobileNavOpen(false);
-      if (!event.matches) {
-        setDesktopNavCollapsed(readStoredBoolean(DESKTOP_NAV_COLLAPSED_KEY));
-      }
-      frameId = window.requestAnimationFrame(() => {
-        setSidebarTransitionEnabled(true);
-      });
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      mediaQuery.removeEventListener('change', handleChange);
-    };
-  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -424,6 +338,7 @@ function CodeReviewPageBase() {
   }, []);
 
   const addMessage = useCallback((item: Omit<CodeReviewMessage, 'id' | 'createdAt'>) => {
+    finishText();
     setMessages((prev) => [
       ...prev,
       {
@@ -432,7 +347,7 @@ function CodeReviewPageBase() {
         ...item,
       },
     ]);
-  }, []);
+  }, [finishText]);
 
   const normalizeConversationTask = useCallback((task?: Partial<CodeReviewTask> | null) => ({
     reviewType: task?.reviewType ?? null,
@@ -449,31 +364,21 @@ function CodeReviewPageBase() {
 
   const appendAssistantText = useCallback((reviewItemId: string, text: string) => {
     if (!text) return;
-
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === 'assistant' && last.messageType === 'text') {
-        const next = [...prev];
-        next[next.length - 1] = {
-          ...last,
-          content: `${last.content}${text}`,
-        };
-        return next;
-      }
-
-      return [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          reviewId: reviewItemId,
-          role: 'assistant',
-          messageType: 'text',
-          content: text,
-          dataJson: null,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-    });
+    if (!textRuntimeRef.current) {
+      const id = crypto.randomUUID();
+      const message: CodeReviewMessage = {
+        id, reviewId: reviewItemId, role: 'assistant', messageType: 'text',
+        content: '', dataJson: null, createdAt: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, message]);
+      textRuntimeRef.current = createTextStreamRuntime({
+        identity: { scope: 'code-review', conversationId: reviewItemId, requestId: crypto.randomUUID() },
+        key: `code-review:${id}`,
+        onCheckpoint: snapshot => setMessages(prev => prev.map(item => item.id === id ? { ...item, content: snapshot.content } : item)),
+      });
+    }
+    const runtime = textRuntimeRef.current;
+    runtime.receive({ content: runtime.received.content + text });
   }, []);
 
   const syncConversationRecord = useCallback(
@@ -687,7 +592,6 @@ function CodeReviewPageBase() {
           syncReviewIdToUrl(activeReviewId);
         }
         appendAssistantText(activeReviewId, chunk.text);
-        addLog('text', chunk.text);
         if (!reviewStatus || reviewStatus === 'idle') {
           setReviewStatus('reviewing');
         }
@@ -979,11 +883,6 @@ function CodeReviewPageBase() {
     syncReviewIdToUrl,
   ]);
 
-  useEffect(() => {
-    const el = messageListRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [isSending, messages.length, reviewStatus, statusText]);
 
   useEffect(() => {
     const textarea = inputRef.current;
@@ -993,6 +892,8 @@ function CodeReviewPageBase() {
 
   const resetLocalState = useCallback((options?: { keepUrl?: boolean }) => {
     abortRef.current?.abort();
+    abortRef.current = null;
+    finishText();
     setDraft('');
     setReviewId(null);
     setReviewStatus('idle');
@@ -1018,7 +919,7 @@ function CodeReviewPageBase() {
     if (!options?.keepUrl) {
       syncReviewIdToUrl(null);
     }
-  }, [syncReviewIdToUrl]);
+  }, [syncReviewIdToUrl, finishText]);
 
   const handleNewReview = useCallback(async () => {
     if (isSending) {
@@ -1056,6 +957,7 @@ function CodeReviewPageBase() {
         return;
       }
 
+      scrollToLatest();
       setIsSending(true);
       setPlannerError(null);
       setStreamError(null);
@@ -1075,14 +977,17 @@ function CodeReviewPageBase() {
 
         await consumeCodeReviewStream(response, {
           signal: controller.signal,
-          onEvent: handleStreamEvent,
+          onEvent: event => { if (abortRef.current === controller && !controller.signal.aborted) handleStreamEvent(event); },
           onRawLineError: (line, error) => {
             console.warn('Invalid code review SSE frame:', line, error);
           },
         });
 
+        if (abortRef.current !== controller) return;
+        finishText();
         await hydrateReviewFromServer(reviewId);
       } catch (error: any) {
+        if (abortRef.current !== controller) return;
         if (controller.signal.aborted) {
           messageApi.info('已停止确认请求');
           setStatusText('已停止');
@@ -1095,8 +1000,11 @@ function CodeReviewPageBase() {
         setStatusText(errorMessage);
         messageApi.error(errorMessage);
       } finally {
-        setIsSending(false);
-        abortRef.current = null;
+        if (abortRef.current === controller) {
+          finishText();
+          setIsSending(false);
+          abortRef.current = null;
+        }
       }
     },
     [canConfirm, handleStreamEvent, hydrateReviewFromServer, messageApi, reviewId],
@@ -1128,6 +1036,7 @@ function CodeReviewPageBase() {
       };
       setMessages((prev) => [...prev, optimisticMessage]);
       setDraft('');
+      scrollToLatest();
       setIsSending(true);
       setPlannerError(null);
       setStreamError(null);
@@ -1158,17 +1067,20 @@ function CodeReviewPageBase() {
 
         await consumeCodeReviewStream(response, {
           signal: controller.signal,
-          onEvent: handleStreamEvent,
+          onEvent: event => { if (abortRef.current === controller && !controller.signal.aborted) handleStreamEvent(event); },
           onRawLineError: (line, error) => {
             console.warn('Invalid code review SSE frame:', line, error);
           },
         });
 
+        if (abortRef.current !== controller) return;
+        finishText();
         const activeReviewId = hydratedReviewIdRef.current ?? reviewId;
         if (activeReviewId) {
           await hydrateReviewFromServer(activeReviewId);
         }
       } catch (error: any) {
+        if (abortRef.current !== controller) return;
         if (controller.signal.aborted) {
           messageApi.info('已停止请求');
           setStatusText('已停止');
@@ -1188,24 +1100,17 @@ function CodeReviewPageBase() {
         });
         messageApi.error(errorMessage);
       } finally {
-        setIsSending(false);
-        abortRef.current = null;
+        if (abortRef.current === controller) {
+          finishText();
+          setIsSending(false);
+          abortRef.current = null;
+        }
       }
     },
     [addLog, canConfirm, canReply, currentTask, draft, handleConfirm, handleStreamEvent, hydrateReviewFromServer, isSending, messageApi, reviewId, reviewStatus],
   );
 
-  const handleDesktopToggle = useCallback(() => {
-    setDesktopNavCollapsed((prev) => !prev);
-  }, []);
 
-  const handleMobileOpen = useCallback(() => {
-    setMobileNavOpen(true);
-  }, []);
-
-  const handleMobileClose = useCallback(() => {
-    setMobileNavOpen(false);
-  }, []);
 
   const handleRemoveReviewConversation = useCallback(
     async (targetReviewId: string) => {
@@ -1264,8 +1169,9 @@ function CodeReviewPageBase() {
     <div
       className={`home${mobileNavOpen ? ' home--mobile-nav-open' : ''}${desktopNavCollapsed ? ' home--desktop-nav-collapsed' : ''}${sidebarTransitionEnabled ? ' home--sidebar-transition-enabled' : ''}`}
     >
-      {contextHolder}
+
       <ReviewSessionNav
+        mobileTriggerRef={mobileTriggerRef}
         conversations={orderedReviewConversations}
         mobileOpen={mobileNavOpen}
         desktopCollapsed={desktopNavCollapsed}
@@ -1277,25 +1183,28 @@ function CodeReviewPageBase() {
       />
 
       <div className="chat">
-        <header className="chat__header">
+        <WorkspaceHeader className="chat__header">
           <div className="chat__header-main">
-            <button
+            <Button variant="ghost"
               type="button"
-              className="chat__sessions-toggle"
+              ref={mobileTriggerRef}
+              aria-expanded={mobileNavOpen}
+              aria-controls="workspace-session-sidebar"
+              className="chat__sessions-toggle min-[1025px]:hidden"
               onClick={handleMobileOpen}
               aria-label="展开审查会话列表"
             >
               <PanelLeft size={18} />
-            </button>
+            </Button>
             <div className="chat__header-info">
               <h1 className="chat__title">代码审查</h1>
-              <span className="chat__status">
+              <Badge className="chat__status">
                 {statusText || (reviewId ? statusLabel(reviewStatus) : '等待创建对话')}
-              </span>
+              </Badge>
             </div>
           </div>
           <div className="chat__header-actions">
-            <button
+            <Button variant="outline"
               type="button"
               className="chat__clear"
               title="清空当前会话"
@@ -1304,8 +1213,8 @@ function CodeReviewPageBase() {
             >
               <RefreshCcw size={18} />
               <span>新对话</span>
-            </button>
-            <button
+            </Button>
+            <Button variant="outline"
               type="button"
               className="chat__clear"
               title="停止"
@@ -1314,22 +1223,20 @@ function CodeReviewPageBase() {
             >
               <Square size={18} />
               <span>停止</span>
-            </button>
+            </Button>
           </div>
-        </header>
+        </WorkspaceHeader>
 
-        <div className="chat__messages" ref={messageListRef}>
+        {showLatest && <Button variant="outline" onClick={scrollToLatest}>回到最新</Button>}
+        <WorkspaceMessages className="chat__messages" ref={messageListRef}>
           {messages.length === 0 && (
-            <div className="chat__empty">
-              <Sparkles size={48} className="chat__empty-icon" />
-              <h2>有什么我可以帮你审查的吗？</h2>
-              <p>发送一句自然语言开始代码审查，我会像知识库对话一样跟你来回确认。</p>
-            </div>
+            <WorkspaceEmpty icon={<Sparkles size={40} />} title="有什么我可以帮你审查的吗？" description="发送一句自然语言开始代码审查，我会像知识库对话一样跟你来回确认。" />
           )}
 
           {messages.map((item) => (
             <div className="message-container" key={item.id}>
               <MessageItem
+                streamKey={`code-review:${item.id}`}
                 role={item.role}
                 content={item.content}
                 metadata={undefined}
@@ -1340,12 +1247,12 @@ function CodeReviewPageBase() {
                 </div>
               )}
               {item.messageType === 'action' && canConfirm && (
-                <div className="code-review-page__confirm-card">
+                <WorkspaceConfirmCard className="code-review-page__confirm-card">
                   <div>
                     <strong>等待确认继续</strong>
                     <span>确认后我会进入后续执行阶段；如果当前缺少可写回的文件路径，我会继续追问。</span>
                   </div>
-                  <button
+                  <Button
                     type="button"
                     className="code-review-page__confirm-button"
                     disabled={isSending}
@@ -1355,27 +1262,27 @@ function CodeReviewPageBase() {
                   >
                     <CheckCircle2 size={16} />
                     确认继续
-                  </button>
-                </div>
+                  </Button>
+                </WorkspaceConfirmCard>
               )}
             </div>
           ))}
 
-        </div>
+        </WorkspaceMessages>
 
         <div className="chat__footer">
           <div className="chat__controls">
             {isSending && (
-              <button className="chat__stop" onClick={() => abortRef.current?.abort()}>
+              <Button variant="outline" className="chat__stop" onClick={() => abortRef.current?.abort()}>
                 <Square size={14} fill="currentColor" />
                 停止生成
-              </button>
+              </Button>
             )}
           </div>
-          <form className="chat__form" onSubmit={(event) => {
+          <WorkspaceComposer className="chat__form" onSubmit={(event) => {
             void handleSubmit(event);
           }}>
-            <textarea
+            <Textarea
               ref={inputRef}
               className="chat__input"
               rows={1}
@@ -1404,21 +1311,21 @@ function CodeReviewPageBase() {
                 }
               }}
             />
-            <button
+            <Button
               type="submit"
               className="chat__send"
               disabled={!draft.trim() || isSending || (!!reviewId && !canReply && !canConfirm)}
             >
               <Send size={20} />
-            </button>
-          </form>
+            </Button>
+          </WorkspaceComposer>
         </div>
 
         {(plannerError || streamError) && (
-          <div className="chat__error" role="alert">
+          <WorkspaceError className="chat__error" role="alert">
             <AlertCircle size={16} />
             <span>{plannerError || streamError}</span>
-          </div>
+          </WorkspaceError>
         )}
       </div>
     </div>

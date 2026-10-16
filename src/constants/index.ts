@@ -1,7 +1,15 @@
 
 export const isProd = window.location.host.includes('aqiong.xyz') || window.location.host.includes('4everland.app')
 
-export const BACKEND_API_BASE_URL = isProd ? 'https://www.adongdong.xyz/api' : 'http://localhost:3000/api';
+const configuredApiOrigin = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '');
+
+export const BACKEND_API_BASE_URL = configuredApiOrigin
+  ? configuredApiOrigin.endsWith('/api')
+    ? configuredApiOrigin
+    : `${configuredApiOrigin}/api`
+  : isProd
+    ? 'https://www.adongdong.xyz/api'
+    : 'http://localhost:3000/api';
 
 export const CHAT_API_PATH = '/chat';
 export const PUBLIC_CHAT_API_PATH = '/public/chat';

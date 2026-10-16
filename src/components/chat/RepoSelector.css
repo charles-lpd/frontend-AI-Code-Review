@@ -1,3 +1,4 @@
+@layer components {
 .repo-selector {
   position: relative;
   width: 100%;
@@ -11,10 +12,10 @@
   width: 100%;
   min-height: 42px;
   padding: 0.65rem 1rem;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: hsl(var(--background) / 0.92);
+  border: 1px solid hsl(var(--border) / 0.95);
   border-radius: 999px;
-  color: #334155;
+  color: hsl(var(--foreground));
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
@@ -22,22 +23,17 @@
 }
 
 .repo-selector__trigger:hover {
-  background: #fff;
+  background: hsl(var(--background));
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.08);
 }
 
 .repo-selector__dropdown {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  width: 100%;
   max-height: 400px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(229, 231, 235, 0.95);
-  border-radius: 22px;
-  margin-bottom: 8px;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
+  background: hsl(var(--background) / 0.92);
+  border: 1px solid hsl(var(--border) / 0.95);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.08);
   display: flex;
   flex-direction: column;
   z-index: 100;
@@ -47,7 +43,7 @@
 
 .repo-selector__header {
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(229, 231, 235, 0.95);
+  border-bottom: 1px solid hsl(var(--border) / 0.95);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -56,13 +52,13 @@
 .repo-selector__header h3 {
   margin: 0;
   font-size: 0.9rem;
-  color: #0f172a;
+  color: hsl(var(--foreground));
 }
 
 .repo-selector__header button {
   background: transparent;
   border: none;
-  color: #64748b;
+  color: hsl(var(--primary));
   font-size: 0.82rem;
   cursor: pointer;
 }
@@ -79,13 +75,13 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.85rem 0.95rem;
-  border-radius: 16px;
+  border-radius: var(--radius);
   cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
 .repo-item:hover {
-  background: rgba(248, 250, 252, 0.95);
+  background: hsl(var(--background) / 0.95);
   transform: translateY(-1px);
 }
 
@@ -97,33 +93,33 @@
 
 .repo-item__name {
   font-size: 0.88rem;
-  color: #0f172a;
+  color: hsl(var(--foreground));
 }
 
 .repo-item__badge {
   font-size: 0.68rem;
   padding: 0.18rem 0.45rem;
-  background: rgba(15, 23, 42, 0.04);
-  border: 1px solid rgba(229, 231, 235, 0.95);
+  background: hsl(var(--foreground) / 0.04);
+  border: 1px solid hsl(var(--border) / 0.95);
   border-radius: 999px;
-  color: #64748b;
+  color: hsl(var(--primary));
 }
 
 .repo-item a {
-  color: #6b7280;
+  color: hsl(var(--muted-foreground));
   display: flex;
   align-items: center;
 }
 
 .repo-item a:hover {
-  color: #1a1a1a;
+  color: hsl(var(--foreground));
 }
 
 .repo-selector__loading,
 .repo-selector__empty {
   padding: 32px;
   text-align: center;
-  color: #64748b;
+  color: hsl(var(--primary));
   font-size: 0.85rem;
 }
 
@@ -132,16 +128,16 @@
   align-items: center;
   gap: 8px;
   padding: 0.8rem 1rem;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.18);
-  border-radius: 16px;
-  color: #dc2626;
+  background: hsl(var(--destructive) / 0.08);
+  border: 1px solid hsl(var(--destructive) / 0.18);
+  border-radius: var(--radius);
+  color: hsl(var(--destructive));
   font-size: 0.85rem;
   margin-bottom: 0;
 }
 
 .install-link {
-  color: #dc2626;
+  color: hsl(var(--primary));
   text-decoration: underline;
   font-weight: 600;
 }
@@ -173,7 +169,7 @@
 
   .repo-selector__dropdown {
     max-height: min(50vh, 360px);
-    border-radius: 18px;
+    border-radius: var(--radius);
   }
 
   .repo-selector__header {
@@ -225,4 +221,6 @@
     font-size: 0.64rem;
     padding: 0.16rem 0.4rem;
   }
+}
+
 }

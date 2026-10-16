@@ -1,3 +1,6 @@
+import { Card } from '@/ui/card';
+import { Badge } from '@/ui/badge';
+import { Button } from '@/ui/button';
 import { memo, useMemo } from 'react';
 import { Copy, Download, ExternalLink, Play } from 'lucide-react';
 import type { GenerationModuleKey, GenerationRunArtifact } from '../../types/generation';
@@ -32,7 +35,7 @@ function GenerationArtifactGalleryBase({
   const hasArtifactActions = Boolean(onCopyLink || onDownload);
 
   return (
-    <section className="generation-page__card generation-page__artifacts">
+    <Card className="generation-page__card generation-page__artifacts">
       <div className="generation-page__card-head">
         <div>
           <h2 className="generation-page__card-title">
@@ -42,7 +45,7 @@ function GenerationArtifactGalleryBase({
             任务成功后会校验文件，校验通过后在这里展示产物。
           </p>
         </div>
-        <span className="generation-page__badge">{orderedArtifacts.length} 项</span>
+        <Badge className="generation-page__badge">{orderedArtifacts.length} 项</Badge>
       </div>
 
       {selectedArtifact ? (
@@ -56,7 +59,7 @@ function GenerationArtifactGalleryBase({
                 preload="metadata"
               />
             ) : (
-              <button
+              <Button variant="ghost"
                 type="button"
                 className="generation-page__image-preview-button"
                 onClick={() => onSelectArtifact(selectedArtifact.artifactKey)}
@@ -66,7 +69,7 @@ function GenerationArtifactGalleryBase({
                   src={selectedPreviewUrl}
                   alt={selectedArtifact.title || selectedArtifact.artifactKey}
                 />
-              </button>
+              </Button>
             )
           ) : (
             <div className="generation-page__empty-note">
@@ -96,24 +99,24 @@ function GenerationArtifactGalleryBase({
             {hasArtifactActions && (
               <div className="generation-page__artifact-actions">
                 {onCopyLink && (
-                  <button
+                  <Button variant="outline"
                     type="button"
                     className="generation-page__ghost-button generation-page__ghost-button--small"
                     onClick={() => onCopyLink(selectedArtifact)}
                   >
                     <Copy size={14} />
                     复制链接
-                  </button>
+                  </Button>
                 )}
                 {onDownload && (
-                  <button
+                  <Button variant="outline"
                     type="button"
                     className="generation-page__ghost-button generation-page__ghost-button--small"
                     onClick={() => onDownload(selectedArtifact)}
                   >
                     <Download size={14} />
                     下载
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -131,7 +134,7 @@ function GenerationArtifactGalleryBase({
           const isActive = artifact.artifactKey === selectedArtifact?.artifactKey;
           const previewUrl = previewUrlMap[artifact.artifactKey];
           return (
-            <button
+            <Button variant="ghost"
               key={artifact.artifactKey}
               type="button"
               className={`generation-page__artifact-card${isActive ? ' generation-page__artifact-card--active' : ''}`}
@@ -170,11 +173,11 @@ function GenerationArtifactGalleryBase({
                   <span>查看详情</span>
                 </div>
               </div>
-            </button>
+            </Button>
           );
         })}
       </div>
-    </section>
+    </Card>
   );
 }
 

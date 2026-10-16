@@ -18,6 +18,7 @@ import {
   rebuildSessionKnowledge,
   checkSessionKnowledgeConsistency,
   getKnowledgeContent,
+  reindexSessionKnowledgeFile,
 } from './index';
 
 function normalizeKnowledgeFile(file: any): SessionKnowledgeFile {
@@ -31,8 +32,9 @@ function normalizeKnowledgeFile(file: any): SessionKnowledgeFile {
       : file.createdAt
         ? new Date(file.createdAt).getTime()
         : Date.now(),
-    indexStatus: file.indexStatus ?? 'ready',
-    indexError: file.indexError ?? null,
+    indexStatus: file.indexStatus ?? 'pending',
+    errorMessage: file.errorMessage ?? file.indexError ?? null,
+    indexError: file.errorMessage ?? file.indexError ?? null,
   };
 }
 
@@ -41,6 +43,11 @@ function normalizeManageConfig(session: any): SessionManageConfig {
     isPublic: session.manageConfig?.isPublic ?? session.isPublic ?? false,
     systemPrompt:
       session.manageConfig?.systemPrompt ?? session.systemPrompt ?? '',
+    chatMode: session.manageConfig?.chatMode ?? session.chatMode ?? 'auto',
+    knowledgeReadiness:
+      session.manageConfig?.knowledgeReadiness ??
+      session.knowledgeReadiness ??
+      'empty',
     knowledgeFiles: (session.manageConfig?.knowledgeFiles ?? []).map(
       normalizeKnowledgeFile,
     ),
@@ -55,8 +62,12 @@ function normalizeSession(session: any): ChatSession {
       : session.createdAt
         ? new Date(session.createdAt).getTime()
         : Date.now(),
-    messages: session.messages || [],
+    messages: (session.messages || []).map((message: any) => ({
+      ...message,
+      createdAt: message.createdAt ? new Date(message.createdAt).getTime() : undefined,
+    })),
     draft: session.draft || '',
+    chatMode: session.chatMode ?? session.manageConfig?.chatMode ?? 'auto',
     manageConfig: normalizeManageConfig(session),
   } as ChatSession;
 }
@@ -66,6 +77,7 @@ function normalizePublicSession(session: any): PublicSessionInfo {
     id: session.id,
     title: session.title,
     isPublic: session.isPublic ?? session.manageConfig?.isPublic ?? false,
+    chatMode: session.chatMode ?? session.manageConfig?.chatMode ?? 'auto',
     createdAt: session.createdAt
       ? new Date(session.createdAt).getTime()
       : Date.now(),
@@ -87,10 +99,16 @@ export const sessionApi = {
 
   async listKnowledgeFiles(id: string): Promise<SessionKnowledgeFile[]> {
     const result = await listSessionKnowledge(id);
-    const knowledgeFiles = Array.isArray(result)
-      ? result
-      : result?.knowledgeFiles ?? [];
-    return knowledgeFiles.map(normalizeKnowledgeFile);
+    return result.map(normalizeKnowledgeFile);
+  },
+
+  async getKnowledgeState(id: string) {
+    const result = await listSessionKnowledge(id);
+    const rawFiles = result;
+    return {
+      knowledgeFiles: rawFiles.map(normalizeKnowledgeFile),
+      knowledgeReadiness: rawFiles[0]?.knowledgeReadiness ?? 'empty',
+    } as { knowledgeFiles: SessionKnowledgeFile[]; knowledgeReadiness?: import('../types/chat').KnowledgeReadiness };
   },
 
   async create(title?: string): Promise<ChatSession> {
@@ -113,6 +131,7 @@ export const sessionApi = {
       title?: string;
       isPublic?: boolean;
       systemPrompt?: string;
+      chatMode?: import('../types/chat').ChatMode;
     },
   ): Promise<ChatSession> {
     const session = await updateSessionManage(id, payload);
@@ -122,9 +141,12 @@ export const sessionApi = {
   async uploadKnowledge(
     id: string,
     files: File[],
-  ): Promise<SessionKnowledgeFile[]> {
+  ): Promise<{ knowledgeFiles: SessionKnowledgeFile[]; knowledgeReadiness?: import('../types/chat').KnowledgeReadiness }> {
     const result = await uploadSessionKnowledge(id, files);
-    return result.knowledgeFiles ?? [];
+    return {
+      ...result,
+      knowledgeFiles: (result.knowledgeFiles ?? []).map(normalizeKnowledgeFile),
+    };
   },
 
   async deleteKnowledge(
@@ -136,6 +158,10 @@ export const sessionApi = {
 
   async rebuildKnowledge(id: string): Promise<{ success: boolean }> {
     return rebuildSessionKnowledge(id);
+  },
+
+  async reindexKnowledgeFile(id: string, fileId: string) {
+    return reindexSessionKnowledgeFile(id, fileId);
   },
 
   async checkKnowledgeConsistency(

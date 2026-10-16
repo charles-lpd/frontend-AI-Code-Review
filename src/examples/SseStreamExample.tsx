@@ -1,3 +1,5 @@
+import { Textarea } from '@/ui/textarea';
+import { Button } from '@/ui/button';
 import { useCallback, useRef, useState } from 'react';
 
 type StreamMessage = {
@@ -164,7 +166,7 @@ export default function SseStreamExample() {
     <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
       <h2>流式接收最小示例</h2>
 
-      <textarea
+      <Textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
         rows={4}
@@ -173,23 +175,23 @@ export default function SseStreamExample() {
       />
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button type="button" onClick={() => void handleSend()} disabled={isLoading}>
+        <Button variant="outline" type="button" onClick={() => void handleSend()} disabled={isLoading}>
           {isLoading ? '发送中...' : '发送'}
-        </button>
-        <button
+        </Button>
+        <Button variant="outline"
           type="button"
           onClick={() => abortRef.current?.abort()}
           disabled={!isLoading}
         >
           停止
-        </button>
+        </Button>
       </div>
 
       {error && <div style={{ color: 'crimson', marginBottom: 12 }}>{error}</div>}
 
       <div
         style={{
-          border: '1px solid #ddd',
+          border: '1px solid hsl(var(--border))',
           borderRadius: 8,
           padding: 16,
           minHeight: 240,

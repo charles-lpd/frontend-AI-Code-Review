@@ -6,7 +6,36 @@ import {
   SESSIONS_API_PREFIX,
 } from '../constants';
 import { useAuthStore } from '../store/useAuthStore';
-import type { PublicChatMessage, SessionKnowledgeFile } from '../types/chat';
+import type { ApiErrorCode, PublicChatMessage, SessionKnowledgeFile } from '../types/chat';
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public code: ApiErrorCode = 'INTERNAL_ERROR',
+    public requestId?: string,
+    public retryable = false,
+    public status?: number,
+    public retryAfterSeconds?: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+async function throwResponseError(response: Response): Promise<never> {
+  const data = await response.json().catch(() => ({}));
+  const detail = data?.error;
+  const retryAfterHeader = response.headers.get('Retry-After');
+  const retryAfter = retryAfterHeader === null ? undefined : Number(retryAfterHeader);
+  throw new ApiError(
+    detail?.message || (typeof detail === 'string' ? detail : `请求失败: ${response.status}`),
+    detail?.code,
+    detail?.requestId,
+    detail?.retryable,
+    response.status,
+    Number.isFinite(retryAfter) ? retryAfter : undefined,
+  );
+}
 
 export type KnowledgePreviewResult =
   | {
@@ -28,26 +57,31 @@ export const baseUrl = BACKEND_API_BASE_URL;
 
 export const sendChatStream = async (
   sessionId: string,
-  messages: any[],
+  messages: Array<{
+    role: 'user' | 'assistant' | 'system' | 'tool';
+    content: string;
+  }>,
   signal?: AbortSignal,
+  clientMessageId?: string,
 ) => {
   const token = useAuthStore.getState().token;
   const response = await fetch(`${baseUrl}${CHAT_API_PATH}`, {
     method: 'POST',
     headers: {
+      Accept: 'text/event-stream',
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({
       sessionId,
+      ...(clientMessageId ? { clientMessageId } : {}),
       messages,
     }),
     signal,
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `请求失败: ${response.status}`);
+    await throwResponseError(response);
   }
 
   return response;
@@ -61,6 +95,7 @@ export const sendPublicChatStream = async (
   const response = await fetch(`${baseUrl}${PUBLIC_CHAT_API_PATH}`, {
     method: 'POST',
     headers: {
+      Accept: 'text/event-stream',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -71,12 +106,7 @@ export const sendPublicChatStream = async (
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.error?.message ||
-        errorData.error ||
-        `请求失败: ${response.status}`,
-    );
+    await throwResponseError(response);
   }
 
   return response;
@@ -112,11 +142,16 @@ api.interceptors.response.use(
       }
     }
 
-    const enhancedError = new Error(errorMsg);
-    (enhancedError as any).code = backendError?.code;
-    (enhancedError as any).status = error.response?.status;
-
-    return Promise.reject(enhancedError);
+    return Promise.reject(new ApiError(
+      errorMsg,
+      backendError?.code,
+      backendError?.requestId,
+      backendError?.retryable,
+      error.response?.status,
+      Number.isFinite(Number(error.response?.headers?.['retry-after']))
+        ? Number(error.response?.headers?.['retry-after'])
+        : undefined,
+    ));
   },
 );
 
@@ -186,6 +221,7 @@ export const updateSessionManage = async (
     title?: string;
     isPublic?: boolean;
     systemPrompt?: string;
+    chatMode?: import('../types/chat').ChatMode;
   },
 ): Promise<any> => {
   const result = await sendRequest({
@@ -199,7 +235,7 @@ export const updateSessionManage = async (
 export const uploadSessionKnowledge = async (
   sessionId: string,
   files: File[],
-): Promise<{ knowledgeFiles: SessionKnowledgeFile[] }> => {
+): Promise<{ knowledgeFiles: SessionKnowledgeFile[]; knowledgeReadiness?: import('../types/chat').KnowledgeReadiness }> => {
   const token = useAuthStore.getState().token;
   const formData = new FormData();
   files.forEach((file) => {
@@ -213,12 +249,7 @@ export const uploadSessionKnowledge = async (
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.error?.message ||
-        errorData.error ||
-        `请求失败: ${response.status}`,
-    );
+    await throwResponseError(response);
   }
 
   return response.json();
@@ -291,9 +322,9 @@ export const deleteSessionKnowledge = async (
 
 export const listSessionKnowledge = async (
   sessionId: string,
-): Promise<{
-  knowledgeFiles: SessionKnowledgeFile[];
-}> => {
+): Promise<Array<SessionKnowledgeFile & {
+  knowledgeReadiness: import('../types/chat').KnowledgeReadiness;
+}>> => {
   const result = await sendRequest({
     method: 'GET',
     url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge`,
@@ -309,6 +340,16 @@ export const rebuildSessionKnowledge = async (
   const result = await sendRequest({
     method: 'POST',
     url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge/rebuild`,
+  });
+  return result.data;
+};
+
+export const reindexSessionKnowledgeFile = async (sessionId: string, fileId: string): Promise<{
+  success: boolean; fileId: string; jobId: string; deduplicated: boolean; indexStatus: 'pending';
+}> => {
+  const result = await sendRequest({
+    method: 'POST',
+    url: `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge/${fileId}/reindex`,
   });
   return result.data;
 };

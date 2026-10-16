@@ -1,3 +1,5 @@
+import { Card } from '@/ui/card';
+import { Badge } from '@/ui/badge';
 import { memo } from 'react';
 import type { AgentArtifactPanelProps } from '../../types/agent';
 import { AgentArtifactCard } from './AgentArtifactCard';
@@ -17,12 +19,12 @@ function AgentArtifactPanelBase({
   pullRequestUrl: string | null;
 }) {
   return (
-    <section className="agent-page__panel">
+    <Card className="agent-page__panel">
       <div className="agent-page__panel-toggle" aria-hidden="true">
         <div>
           <div className="agent-page__panel-title-row">
             <h2 className="agent-page__panel-title">产物区</h2>
-            <span className="agent-page__panel-badge">{artifacts.length} 项</span>
+            <Badge className="agent-page__panel-badge">{artifacts.length} 项</Badge>
           </div>
           <p className="agent-page__panel-subtitle">集中展示草稿、摘要、PR 和修复结果。</p>
         </div>
@@ -80,7 +82,7 @@ function AgentArtifactPanelBase({
           </div>
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 

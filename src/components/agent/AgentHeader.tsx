@@ -1,3 +1,4 @@
+import { Button } from '@/ui/button';
 import { memo } from 'react';
 import { Bot, Copy, RefreshCcw } from 'lucide-react';
 import type { AgentHeaderProps } from '../../types/agent';
@@ -77,7 +78,7 @@ function AgentHeaderBase({
           <p className="agent-page__subtitle">{summary || '等待开始'}</p>
         </div>
         <div className="agent-page__hero-actions">
-          <button
+          <Button variant="outline"
             type="button"
             className="agent-page__ghost-button"
             onClick={onCopyRunId}
@@ -85,11 +86,11 @@ function AgentHeaderBase({
           >
             <Copy size={16} />
             复制 runId
-          </button>
-          <button type="button" className="agent-page__ghost-button" onClick={onReset}>
+          </Button>
+          <Button variant="outline" type="button" className="agent-page__ghost-button" onClick={onReset}>
             <RefreshCcw size={16} />
             新任务
-          </button>
+          </Button>
         </div>
       </div>
 

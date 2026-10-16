@@ -1,13 +1,11 @@
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Badge } from '@/ui/badge';
+import { Button } from '@/ui/button';
+import { MarkdownRenderer as MarkdownContent } from '@/components/markdown/MarkdownRenderer';
+import { useStreamDraft } from '@/hooks/useStreamDraft';
 import {
   Bot,
-  Check,
   CheckCircle2,
   ChevronDown,
-  Copy,
   Info,
   LoaderCircle,
   User,
@@ -22,47 +20,9 @@ interface MessageItemProps {
   role: ChatRole;
   content: string;
   metadata?: ChatMessage['metadata'];
+  streamKey?: string;
+  streaming?: boolean;
 }
-
-const processContent = (text: string) => {
-  if (!text) return text;
-
-  let processed = text;
-  processed = processed.replace(/\n{3,}/g, '\n\n');
-  processed = processed.replace(/^\n+/, '');
-
-  return processed;
-};
-
-const MarkdownContent = memo(function MarkdownContent({
-  content,
-}: {
-  content: string;
-}) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        code({ node, inline, className, children, ...props }: any) {
-          const match = /language-(\w+)/.exec(className || '');
-          return !inline && match ? (
-            <CodeBlock
-              language={match[1]}
-              value={String(children).replace(/\n$/, '')}
-              {...props}
-            />
-          ) : (
-            <code className={className} {...props}>
-              {children}
-            </code>
-          );
-        },
-      }}
-    >
-      {content}
-    </ReactMarkdown>
-  );
-});
 
 const ReviewStreamView = memo(function ReviewStreamView({
   reviewStream,
@@ -100,21 +60,21 @@ const ReviewStreamView = memo(function ReviewStreamView({
             <div className="review-stream__title">{dimension.name}</div>
             <div className="review-stream__meta">
               {typeof dimension.duration === 'number' && (
-                <span className="review-stream__badge">
+                <Badge className="review-stream__badge">
                   {(dimension.duration / 1000).toFixed(1)}s
-                </span>
+                </Badge>
               )}
               {dimension.loading && (
-                <span className="review-stream__badge review-stream__badge--loading">
+                <Badge className="review-stream__badge review-stream__badge--loading">
                   分析中
-                </span>
+                </Badge>
               )}
               {typeof dimension.ok === 'boolean' && (
-                <span
+                <Badge
                   className={`review-stream__badge ${dimension.ok ? 'review-stream__badge--ok' : 'review-stream__badge--warn'}`}
                 >
                   {dimension.ok ? '完成' : '异常'}
-                </span>
+                </Badge>
               )}
             </div>
           </div>
@@ -155,7 +115,7 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
   const steps = useMemo(
     () =>
       Object.values(agent?.steps ?? {}).sort(
-        (left, right) => left.stepIndex - right.stepIndex,
+        (left, right) => (left.stepIndex ?? left.seq ?? 0) - (right.stepIndex ?? right.seq ?? 0),
       ),
     [agent?.steps],
   );
@@ -165,33 +125,38 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
   const statusLabel =
     agent.status === 'failed'
       ? '执行失败'
+      : agent.status === 'aborted'
+        ? '已停止'
       : agent.status === 'completed'
         ? '处理完成'
         : '正在处理';
+  const modeLabel = agent.executionMode
+    ? { auto: '自动', direct: '普通问答', knowledge: '知识库', assistant: '高级助手' }[agent.executionMode]
+    : 'Agent';
 
   return (
     <div className={`knowledge-agent knowledge-agent--${agent.status}`}>
-      <button
+      <Button variant="ghost"
         type="button"
         className="knowledge-agent__toggle"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
         <span className="knowledge-agent__heading">
-          {agent.status === 'running' ? (
+          {agent.status === 'connecting' || agent.status === 'retrieving' || agent.status === 'generating' ? (
             <LoaderCircle size={15} className="knowledge-agent__spinner" />
           ) : agent.status === 'failed' ? (
             <XCircle size={15} />
           ) : (
             <CheckCircle2 size={15} />
           )}
-          知识库 Agent · {statusLabel}
+          {modeLabel} · {statusLabel}
         </span>
         <ChevronDown
           size={16}
           className={`knowledge-agent__chevron ${open ? 'is-open' : ''}`}
         />
-      </button>
+      </Button>
       <div className={`knowledge-agent__body ${open ? 'is-open' : ''}`}>
         <div className="knowledge-agent__body-inner">
           {steps.map((step) => (
@@ -230,13 +195,17 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
 
 const MessageItem = memo(function MessageItem({
   role,
-  content,
-  metadata,
+  content: savedContent,
+  metadata: savedMetadata,
+  streamKey,
+  streaming = false,
 }: MessageItemProps) {
-  const processedContent = useMemo(() => processContent(content), [content]);
+  const live = useStreamDraft(streamKey);
+  const content = live?.content ?? savedContent;
+  const metadata = live?.metadata ?? savedMetadata;
+  const processedContent = content;
   const reviewStream = metadata?.reviewStream;
   const knowledgeAgent = metadata?.knowledgeAgent;
-  console.log(knowledgeAgent, '123123')
   const icon = useMemo(() => {
     switch (role) {
       case 'user':
@@ -270,53 +239,24 @@ const MessageItem = memo(function MessageItem({
             fallback={processedContent}
           />
         ) : (
-          <MarkdownContent content={processedContent} />
+          <MarkdownContent content={processedContent} streaming={live?.streaming ?? streaming} />
         )}
+        {role === 'assistant' && knowledgeAgent?.citations?.length ? (
+          <div className="message-item__citations">
+            <strong>参考资料</strong>
+            <ol>
+              {knowledgeAgent.citations.map((citation) => (
+                <li key={citation.citationId}>
+                  {citation.fileName} · 片段 {citation.chunkStart + 1}
+                  {citation.chunkEnd !== citation.chunkStart ? `–${citation.chunkEnd + 1}` : ''}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 });
 
 export default MessageItem;
-
-function CodeBlock({ language, value }: { language: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy!', err);
-    }
-  };
-
-  return (
-    <div className="code-block">
-      <div className="code-block__header">
-        <span className="code-block__lang">{language}</span>
-        <button className="code-block__copy" onClick={copyToClipboard}>
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          <span>{copied ? '已复制' : '复制'}</span>
-        </button>
-      </div>
-      <SyntaxHighlighter
-        language={language}
-        style={oneDark}
-        customStyle={{
-          margin: 0,
-          borderRadius: '0 0 8px 8px',
-          maxWidth: '100%',
-          overflowX: 'auto',
-          width: '100%',
-        }}
-        showLineNumbers={false}
-        wrapLines={true}
-        wrapLongLines={true}
-      >
-        {value}
-      </SyntaxHighlighter>
-    </div>
-  );
-}

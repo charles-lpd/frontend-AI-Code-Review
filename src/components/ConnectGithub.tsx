@@ -1,3 +1,5 @@
+import { Card } from '@/ui/card';
+import { Button } from '@/ui/button';
 import {
   ArrowRight,
   Database,
@@ -67,7 +69,7 @@ export default function ConnectGithub() {
           </div>
         </div>
 
-        <div className="connect-github__panel">
+        <Card className="connect-github__panel">
           <div className="connect-github__panel-card">
             <h2 className="connect-github__panel-title">产品速览</h2>
             <p className="connect-github__panel-text">
@@ -97,16 +99,16 @@ export default function ConnectGithub() {
               </div>
             </div>
           </div>
-          <button onClick={login} className="connect-github__button">
+          <Button onClick={login} className="connect-github__button">
             <GitBranch size={20} />
             <span>连接 GitHub，开始使用</span>
             <ArrowRight size={20} />
-          </button>
+          </Button>
           <div className="connect-github__footnote">
             <Upload size={16} />
             <span>支持会话级知识库、流式问答、公开会话和本地缓存。</span>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

@@ -1,3 +1,8 @@
+import { Card } from '@/ui/card';
+import { Button } from '@/ui/button';
+import { Badge } from '@/ui/badge';
+import { Label } from '@/ui/label';
+import { Checkbox } from '@/ui/checkbox';
 import { type ReactNode } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useAgentRuntime } from '../hooks/useAgentRuntime';
@@ -33,8 +38,8 @@ function ExpandablePanel({
   className?: string;
 }) {
   return (
-    <section className={`agent-page__panel ${className}`.trim()}>
-      <button
+    <Card className={`agent-page__panel ${className}`.trim()}>
+      <Button variant="ghost"
         type="button"
         className="agent-page__panel-toggle"
         onClick={onToggle}
@@ -48,7 +53,7 @@ function ExpandablePanel({
           {subtitle && <p className="agent-page__panel-subtitle">{subtitle}</p>}
         </div>
         <span className={`agent-page__collapse-icon${open ? ' agent-page__collapse-icon--open' : ''}`}>⌄</span>
-      </button>
+      </Button>
       <div
         className={`agent-page__collapse-shell${
           open ? ' agent-page__collapse-shell--open' : ''
@@ -56,7 +61,7 @@ function ExpandablePanel({
       >
         <div className="agent-page__collapse-body">{children}</div>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -138,7 +143,7 @@ export default function AgentPage(props: AgentPageProps = {}) {
             subtitle="Agent 会自动理解意图并生成步骤。"
             open={isOverviewOpen}
             onToggle={() => togglePanel('overview')}
-            badge={<span className="agent-page__panel-badge">{view.intentLabel}</span>}
+            badge={<Badge className="agent-page__panel-badge">{view.intentLabel}</Badge>}
           >
             {currentTaskMeta}
           </ExpandablePanel>
@@ -154,33 +159,33 @@ export default function AgentPage(props: AgentPageProps = {}) {
             subtitle="控制写回、PR 和自动评论。"
             open={isAdvancedOpen}
             onToggle={toggleAdvanced}
-            badge={<span className="agent-page__panel-badge">偏好</span>}
+            badge={<Badge className="agent-page__panel-badge">偏好</Badge>}
           >
             <div className="agent-page__advanced">
-              <label className="agent-page__switch">
-                <input
+              <Label className="agent-page__switch">
+                <Checkbox
                   type="checkbox"
                   checked={agent.state.confirmPreferences.allowWriteBack}
                   onChange={(e) => agent.actions.handleConfirmToggleWriteBack(e.target.checked)}
                 />
                 <span>允许写回仓库</span>
-              </label>
-              <label className="agent-page__switch">
-                <input
+              </Label>
+              <Label className="agent-page__switch">
+                <Checkbox
                   type="checkbox"
                   checked={agent.state.confirmPreferences.allowCreatePR}
                   onChange={(e) => agent.actions.handleConfirmToggleCreatePR(e.target.checked)}
                 />
                 <span>允许创建 PR</span>
-              </label>
-              <label className="agent-page__switch">
-                <input
+              </Label>
+              <Label className="agent-page__switch">
+                <Checkbox
                   type="checkbox"
                   checked={agent.state.confirmPreferences.allowAutoComment}
                   onChange={(e) => agent.actions.handleConfirmToggleAutoComment(e.target.checked)}
                 />
                 <span>允许自动评论</span>
-              </label>
+              </Label>
             </div>
           </ExpandablePanel>
         </aside>
@@ -191,7 +196,7 @@ export default function AgentPage(props: AgentPageProps = {}) {
             subtitle="展示当前 Agent 运行与待处理信息。"
             open={isStateOpen}
             onToggle={() => togglePanel('state')}
-            badge={<span className="agent-page__panel-badge">{view.statusBadgeLabel}</span>}
+            badge={<Badge className="agent-page__panel-badge">{view.statusBadgeLabel}</Badge>}
           >
             {agent.state.status === 'idle' ? (
               <div className="agent-page__state-card">

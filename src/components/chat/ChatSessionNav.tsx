@@ -1,13 +1,17 @@
+import { Badge } from '@/ui/badge';
+import { Button } from '@/ui/button';
 /**
  * 会话导航：通过 /chat/:sessionId 切换会话
  */
-import { memo, useCallback, type MouseEvent } from 'react';
+import { memo, useCallback } from 'react';
+import { WorkspaceSessionRow, WorkspaceSidebar } from '@/components/workspace/workspace';
+import { ConfirmAction } from '@/components/confirm-action';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { PanelLeft, PanelRightClose, Plus, X } from 'lucide-react';
 import { useChatStore } from '../../store/useChatStore';
-import './ChatSessionNav.css';
+
 
 interface ChatSessionNavProps {
+  mobileTriggerRef?: import('react').RefObject<HTMLButtonElement | null>;
   sendingSessionId?: string | null;
   mobileOpen?: boolean;
   desktopCollapsed?: boolean;
@@ -20,7 +24,7 @@ interface SessionListProps {
   sessions: ReturnType<typeof useChatStore.getState>['sessions'];
   sendingSessionId: string | null;
   onMobileClose?: () => void;
-  onRemove: (e: MouseEvent, id: string) => void;
+  onRemove: (id: string) => Promise<void>;
 }
 
 const SessionList = memo(function SessionList({
@@ -48,7 +52,11 @@ const SessionList = memo(function SessionList({
     <ul className="session-nav__list">
       {sessions.map((session) => (
         <li key={session.id}>
-          <NavLink
+<WorkspaceSessionRow deleteAction={sessions.length > 1 ? <ConfirmAction title="确定要删除这个会话吗？" onConfirm={() => onRemove(session.id)}>
+              <Button variant="ghost" type="button" className="session-nav__delete" title="删除会话" aria-label={`删除会话：${session.title}`}>
+                <span aria-hidden="true">×</span>
+              </Button>
+            </ConfirmAction> : undefined}><NavLink
             to={`/chat/${session.id}`}
             className={({ isActive }) =>
               `session-nav__item${isActive ? ' session-nav__item--active' : ''}`
@@ -57,19 +65,9 @@ const SessionList = memo(function SessionList({
           >
             <span className="session-nav__title">{session.title}</span>
             {sendingSessionId === session.id && (
-              <span className="session-nav__badge">…</span>
+              <Badge className="session-nav__badge">…</Badge>
             )}
-            {sessions.length > 1 && (
-              <button
-                type="button"
-                className="session-nav__delete flex justify-center items-center"
-                title="删除会话"
-                onClick={(e) => onRemove(e, session.id)}
-              >
-                ×
-              </button>
-            )}
-          </NavLink>
+</NavLink></WorkspaceSessionRow>
         </li>
       ))}
     </ul>
@@ -77,6 +75,7 @@ const SessionList = memo(function SessionList({
 });
 
 function ChatSessionNav({
+  mobileTriggerRef,
   sendingSessionId = null,
   mobileOpen = false,
   desktopCollapsed = false,
@@ -116,12 +115,10 @@ function ChatSessionNav({
   }, [createSession, navigate, onMobileClose]);
 
   const handleRemove = useCallback(
-    async (e: MouseEvent, id: string) => {
-      e.preventDefault();
-      e.stopPropagation();
+    async (id: string) => {
       if (sessions.length <= 1) return;
 
-      if (window.confirm('确定要删除这个会话吗？')) {
+      {
         await removeSession(id);
         const currentActiveId = useChatStore.getState().activeSessionId;
         if (currentActiveId) {
@@ -135,62 +132,9 @@ function ChatSessionNav({
   );
 
   return (
-    <>
-      {mobileOpen && (
-        <button
-          type="button"
-          className="session-nav__overlay"
-          aria-label="关闭会话列表遮罩"
-          onClick={onMobileClose}
-        />
-      )}
-
-      <aside
-        className={`session-nav${mobileOpen ? ' session-nav--mobile-open' : ''}${desktopCollapsed ? ' session-nav--desktop-collapsed' : ''}`}
-      >
-        <div className="session-nav__desktop-header">
-          <button
-            type="button"
-            className="session-nav__desktop-toggle"
-            onClick={onDesktopToggle}
-            aria-label={desktopCollapsed ? '展开侧边栏' : '收起侧边栏'}
-          >
-            {desktopCollapsed ? (
-              <PanelLeft size={18} />
-            ) : (
-              <PanelRightClose size={18} />
-            )}
-          </button>
-        </div>
-
-        <div className="session-nav__mobile-header">
-          <div className="session-nav__mobile-brand">EverPay</div>
-          <button
-            type="button"
-            className="session-nav__mobile-close flex justify-center items-center"
-            onClick={onMobileClose}
-            aria-label="关闭会话列表"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <button
-          type="button"
-          className={`session-nav__new${desktopCollapsed && !mobileOpen ? ' session-nav__new--icon' : ''}`}
-          onClick={handleNew}
-          aria-label="新对话"
-          title="新对话"
-        >
-          {desktopCollapsed && !mobileOpen ? <Plus size={18} /> : '+ 新对话'}
-        </button>
-        <SessionList
-          sessions={sessions}
-          sendingSessionId={sendingSessionId}
-          onMobileClose={onMobileClose}
-          onRemove={handleRemove}
-        />
-      </aside>
-    </>
+    <WorkspaceSidebar mobileTriggerRef={mobileTriggerRef} title="EverPay" newLabel="新对话" mobileOpen={mobileOpen} desktopCollapsed={desktopCollapsed} onDesktopToggle={onDesktopToggle} onMobileClose={onMobileClose} onNew={() => void handleNew()}>
+      <SessionList sessions={sessions} sendingSessionId={sendingSessionId} onMobileClose={onMobileClose} onRemove={handleRemove} />
+    </WorkspaceSidebar>
   );
 }
 

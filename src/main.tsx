@@ -1,8 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import App from './App'
 import './style.css'
+import App from './App'
+import { Toaster } from 'sonner'
+import { TooltipProvider } from '@/ui/tooltip'
 
 const rootEl = document.getElementById('root')
 if (!rootEl) {
@@ -12,7 +14,10 @@ if (!rootEl) {
 createRoot(rootEl).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <TooltipProvider delayDuration={300}>
+        <App />
+        <Toaster theme="light" position="top-center" closeButton toastOptions={{ className: 'border-border bg-popover text-popover-foreground' }} />
+      </TooltipProvider>
     </BrowserRouter>
   </StrictMode>,
 )

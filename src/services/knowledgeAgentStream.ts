@@ -1,162 +1,184 @@
+import { ApiError } from '../api';
+import { readSseFrames } from './streamTransport';
 import type {
+  ApiErrorCode,
+  ChatMode,
+  Citation,
   KnowledgeAgentStep,
   KnowledgeAgentStreamState,
 } from '../types/chat';
 
-type KnowledgeAgentStatusEvent = KnowledgeAgentStep & {
+export type AgentStatusEvent = {
   type: 'agent_status';
   event:
     | 'agent_started'
+    | 'agent_finished'
     | 'model_started'
     | 'model_finished'
     | 'tool_started'
     | 'tool_finished'
-    | 'agent_finished'
     | 'error';
+  stepKey: string;
+  stepLabel: string;
+  stepStatus: 'running' | 'completed' | 'failed';
+  stepIndex: number;
+  stepTotal: number;
+  requestId?: string;
+  mode?: ChatMode;
+  durationMs?: number;
+  citations?: Citation[];
+  code?: ApiErrorCode;
+  message?: string;
+  seq?: number;
+  timestamp?: string;
 };
 
-type KnowledgeChatEvent = {
-  type?: 'text' | 'agent_status';
-  text?: string;
-  warning?: string;
-  error?: string | { message?: string };
-} & Partial<KnowledgeAgentStatusEvent>;
+export type ChatSsePayload =
+  | { type: 'text'; text: string; replayed?: boolean; messageId?: string; seq?: number; timestamp?: string }
+  | { type: 'message_meta'; userMessageId: string; assistantMessageId: string; clientMessageId?: string }
+  | { type: 'citation'; citation: Citation; seq?: number; timestamp?: string }
+  | AgentStatusEvent
+  | { warning: string; text: string }
+  | { error: string; code?: ApiErrorCode; requestId?: string };
 
-interface StreamKnowledgeChatOptions {
+interface ConsumeOptions {
   signal?: AbortSignal;
-  onState: (state: KnowledgeAgentStreamState) => void;
+  onState: (state: KnowledgeAgentStreamState, replaced?: boolean) => void;
   onWarning?: (warning: string) => void;
+  onMessageMeta?: (event: Extract<ChatSsePayload, { type: 'message_meta' }>) => void;
 }
 
 export function createKnowledgeAgentState(): KnowledgeAgentStreamState {
   return {
     answer: '',
     steps: {},
-    status: 'idle',
+    status: 'connecting',
+    citations: [],
   };
 }
 
-function getErrorMessage(error: KnowledgeChatEvent['error']) {
-  if (typeof error === 'string') return error;
-  return error?.message || '知识库 Agent 执行失败';
-}
-
-function reduceStatusEvent(
-  state: KnowledgeAgentStreamState,
-  event: KnowledgeAgentStatusEvent,
-): KnowledgeAgentStreamState {
-  const { type: _type, event: eventName, ...stepPatch } = event;
-  const step: KnowledgeAgentStep = {
-    ...state.steps[event.stepKey],
-    ...stepPatch,
+/** Pure business reduction; request-level sequence deduplication belongs to the consumer. */
+export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatSsePayload): KnowledgeAgentStreamState {
+  let state = current;
+  const publish = (patch: Partial<KnowledgeAgentStreamState>) => { state = { ...state, ...patch }; };
+  const mergeCitations = (citations: Citation[]) => {
+    const byId = new Map(
+      state.citations.map((citation) => [citation.citationId, citation]),
+    );
+    citations.forEach((citation) => byId.set(citation.citationId, citation));
+    publish({ citations: [...byId.values()] });
   };
 
-  return {
-    ...state,
-    steps: {
-      ...state.steps,
-      [event.stepKey]: step,
-    },
-    status:
-      eventName === 'error' || event.stepStatus === 'failed'
+
+    if ('error' in event) {
+      publish({
+        status: 'failed',
+        error: event.error,
+        errorCode: event.code,
+        requestId: event.requestId,
+      });
+      return state;
+    }
+
+    if ('warning' in event) {
+
+      return state;
+    }
+
+    if (event.type === 'text') {
+      publish({
+        answer: event.replayed ? event.text : state.answer + event.text,
+        status: 'generating',
+        ...(event.replayed ? { citations: [], steps: {} } : {}),
+      });
+      return state;
+    }
+
+    if (event.type === 'message_meta') {
+
+      return state;
+    }
+
+    if (event.type === 'citation') {
+      mergeCitations([event.citation]);
+      return state;
+    }
+
+    if (event.citations?.length) mergeCitations(event.citations);
+
+    // tool_finished may omit labels already supplied by tool_started.
+    const previous = state.steps[event.stepKey];
+    const step: KnowledgeAgentStep = {
+      stepKey: event.stepKey,
+      stepLabel: event.stepLabel || previous?.stepLabel || event.stepKey,
+      stepStatus: event.stepStatus,
+      stepIndex: event.stepIndex ?? previous?.stepIndex ?? 0,
+      stepTotal: event.stepTotal ?? previous?.stepTotal ?? 0,
+      seq: event.seq,
+      timestamp: event.timestamp,
+      durationMs: event.durationMs,
+      message: event.message,
+    };
+    const streamStatus =
+      event.event === 'error' || event.stepStatus === 'failed'
         ? 'failed'
-        : eventName === 'agent_finished'
-          ? 'completed'
-          : 'running',
-    error:
-      eventName === 'error'
-        ? event.message || '知识库 Agent 执行失败'
-        : state.error,
-  };
+        : event.event === 'tool_started'
+          ? 'retrieving'
+          : 'generating';
+
+    publish({
+      steps: { ...state.steps, [event.stepKey]: step },
+      status: streamStatus,
+      executionMode: event.mode ?? state.executionMode,
+      requestId: event.requestId ?? state.requestId,
+      errorCode: event.code ?? state.errorCode,
+      error:
+        event.event === 'error'
+          ? event.message || '回答生成失败'
+          : state.error,
+    });
+
+
+  return state;
 }
 
-export async function consumeKnowledgeChatStream(
-  response: Response,
-  options: StreamKnowledgeChatOptions,
-): Promise<KnowledgeAgentStreamState> {
-  if (!response.body) throw new Error('响应正文为空');
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder('utf-8');
-  let buffer = '';
+export async function consumeKnowledgeChatStream(response: Response, options: ConsumeOptions): Promise<KnowledgeAgentStreamState> {
+  if (!response.body) throw new ApiError('浏览器不支持流式响应');
+  const seenSeq = new Set<number>();
   let state = createKnowledgeAgentState();
-
-  const publish = (nextState: KnowledgeAgentStreamState) => {
-    state = nextState;
-    options.onState(state);
-  };
-
-  const processFrame = (frame: string) => {
-    const trimmed = frame.trim();
-    if (!trimmed || trimmed.startsWith(':')) return false;
-
-    const raw = trimmed
-      .split('\n')
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice('data:'.length).trim())
-      .join('\n');
-
-    if (!raw) return false;
-    if (raw === '[DONE]') {
-      if (state.status !== 'failed') {
-        publish({ ...state, status: 'completed' });
+  let completed = false;
+  try {
+    for await (const frame of readSseFrames(response, options.signal)) {
+      if (frame.data.trim() === '[DONE]') {
+        state = { ...state, status: 'completed' };
+        options.onState(state);
+        completed = true;
+        break;
       }
-      return true;
-    }
-
-    let event: KnowledgeChatEvent;
-    try {
-      event = JSON.parse(raw) as KnowledgeChatEvent;
-    } catch {
-      console.error('解析知识库 Agent SSE 数据失败:', raw);
-      return false;
-    }
-
-    if (event.type === 'agent_status') {
-      publish(reduceStatusEvent(state, event as KnowledgeAgentStatusEvent));
-    } else if (event.type === 'text' && typeof event.text === 'string') {
-      publish({ ...state, answer: state.answer + event.text });
-    } else if (event.warning) {
-      options.onWarning?.(event.warning);
-      if (typeof event.text === 'string') {
-        publish({ ...state, answer: state.answer + event.text });
+      let event: ChatSsePayload;
+      try { event = JSON.parse(frame.data); }
+      catch { throw new ApiError('流式响应格式错误', 'LLM_UNAVAILABLE'); }
+      const seq = 'seq' in event ? event.seq : undefined;
+      if (typeof seq === 'number') {
+        if (seenSeq.has(seq)) continue;
+        seenSeq.add(seq);
+      }
+      if ('warning' in event) { options.onWarning?.(event.warning); continue; }
+      if ('type' in event && event.type === 'message_meta') { options.onMessageMeta?.(event); continue; }
+      state = reduceChatEvent(state, event);
+      options.onState(state, 'type' in event && event.type === 'text' && event.replayed === true);
+      if ('error' in event) throw new ApiError(event.error, event.code, event.requestId);
+      if ('type' in event && event.type === 'agent_status' && event.event === 'error') {
+        throw new ApiError(event.message || '回答生成失败', event.code, event.requestId);
       }
     }
-
-    if (event.error) {
-      const message = getErrorMessage(event.error);
-      publish({ ...state, status: 'failed', error: message });
-      throw new Error(message);
-    }
-
-    return false;
-  };
-
-  while (true) {
+    if (!completed) throw new ApiError('连接提前结束，请重试', 'LLM_UNAVAILABLE');
+  } catch (error) {
     if (options.signal?.aborted) {
-      await reader.cancel().catch(() => undefined);
+      options.onState({ ...state, status: 'aborted' });
       throw new DOMException('The operation was aborted.', 'AbortError');
     }
-
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-
-    let boundary = buffer.indexOf('\n\n');
-    while (boundary !== -1) {
-      const frame = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      if (processFrame(frame)) return state;
-      boundary = buffer.indexOf('\n\n');
-    }
-
-    if (done) {
-      if (buffer.trim()) processFrame(buffer);
-      break;
-    }
-  }
-
-  if (state.status !== 'failed') {
-    publish({ ...state, status: 'completed' });
+    throw error;
   }
   return state;
 }

@@ -1,3 +1,4 @@
+import { Button } from '@/ui/button';
 import { memo } from 'react';
 import { AlertCircle } from 'lucide-react';
 import type { AgentErrorCardProps } from '../../types/agent';
@@ -23,14 +24,14 @@ function AgentErrorCardBase({
       )}
       <div className="agent-page__input-actions">
         {onRetry && (
-          <button type="button" className="agent-page__primary-button" onClick={onRetry}>
+          <Button type="button" className="agent-page__primary-button" onClick={onRetry}>
             重试
-          </button>
+          </Button>
         )}
         {onRecover && (
-          <button type="button" className="agent-page__secondary-button" onClick={onRecover}>
+          <Button variant="outline" type="button" className="agent-page__secondary-button" onClick={onRecover}>
             恢复
-          </button>
+          </Button>
         )}
       </div>
     </div>

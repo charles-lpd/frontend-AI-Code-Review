@@ -1,10 +1,9 @@
+import { useWorkspaceSidebar } from '@/hooks/useWorkspaceSidebar';
 /** 首页：左侧会话导航 + 右侧聊天面板，路由 /chat/:sessionId */
 import {
   Profiler,
   memo,
   useCallback,
-  useEffect,
-  // useMemo,
   useState,
 } from 'react';
 
@@ -15,72 +14,17 @@ import { useChatRouteSync } from '../hooks/useChatRouteSync';
 import { useAuth } from '../hooks/useAuth';
 import './Home.css';
 
-const DESKTOP_NAV_COLLAPSED_KEY = 'chat.desktopNavCollapsed';
-const MOBILE_NAV_OPEN_KEY = 'chat.mobileNavOpen';
-const DESKTOP_MEDIA_QUERY = '(min-width: 1025px)';
-
 const MemoizedChatPanel = memo(ChatPanel);
-
-function readStoredBoolean(key: string, fallback = false) {
-  if (typeof window === 'undefined') return fallback;
-  const value = window.localStorage.getItem(key);
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return fallback;
-}
 
 export default function Home() {
   const renderStart = performance.now();
   useChatRouteSync();
   const { isAuthenticated } = useAuth();
   const [sendingSessionId, setSendingSessionId] = useState<string | null>(null);
-  const [mobileNavOpen, setMobileNavOpen] = useState(() =>
-    readStoredBoolean(MOBILE_NAV_OPEN_KEY),
-  );
-  const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(() =>
-    readStoredBoolean(DESKTOP_NAV_COLLAPSED_KEY),
-  );
-  const [sidebarTransitionEnabled, setSidebarTransitionEnabled] =
-    useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(MOBILE_NAV_OPEN_KEY, String(mobileNavOpen));
-  }, [mobileNavOpen]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(
-      DESKTOP_NAV_COLLAPSED_KEY,
-      String(desktopNavCollapsed),
-    );
-  }, [desktopNavCollapsed]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    let frameId = window.requestAnimationFrame(() => {
-      setSidebarTransitionEnabled(true);
-    });
-
-    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
-    const handleChange = (event: MediaQueryListEvent) => {
-      setSidebarTransitionEnabled(false);
-      setMobileNavOpen(false);
-      if (!event.matches) {
-        setDesktopNavCollapsed(readStoredBoolean(DESKTOP_NAV_COLLAPSED_KEY));
-      }
-      frameId = window.requestAnimationFrame(() => {
-        setSidebarTransitionEnabled(true);
-      });
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      mediaQuery.removeEventListener('change', handleChange);
-    };
-  }, []);
+  const {
+    mobileNavOpen, desktopNavCollapsed, sidebarTransitionEnabled,
+    mobileTriggerRef, handleDesktopToggle, handleMobileOpen, handleMobileClose,
+  } = useWorkspaceSidebar('chat');
 
   if (typeof window !== 'undefined') {
     const host = window as typeof window & {
@@ -125,20 +69,6 @@ export default function Home() {
     [mobileNavOpen, desktopNavCollapsed],
   );
 
-  const handleDesktopToggle = useCallback(() => {
-    setDesktopNavCollapsed((prev) => !prev);
-  }, []);
-
-  const handleMobileOpen = useCallback(() => {
-    performance.mark('sidebar-open-click-start');
-    setMobileNavOpen(true);
-  }, []);
-
-  const handleMobileClose = useCallback(() => {
-    performance.mark('sidebar-close-click-start');
-    setMobileNavOpen(false);
-  }, []);
-
   if (!isAuthenticated) {
     return <ConnectGithub />;
   }
@@ -150,6 +80,7 @@ export default function Home() {
       >
         <Profiler id="ChatSessionNav" onRender={onRenderProfiler}>
           <ChatSessionNav
+            mobileTriggerRef={mobileTriggerRef}
             sendingSessionId={sendingSessionId}
             mobileOpen={mobileNavOpen}
             desktopCollapsed={desktopNavCollapsed}
@@ -160,6 +91,8 @@ export default function Home() {
         <Profiler id="ChatPanel" onRender={onRenderProfiler}>
           <MemoizedChatPanel
             onSendingChange={setSendingSessionId}
+            mobileTriggerRef={mobileTriggerRef}
+            mobileNavOpen={mobileNavOpen}
             onOpenSessions={handleMobileOpen}
           />
         </Profiler>

@@ -1,3 +1,6 @@
+import { Card } from '@/ui/card';
+import { Button } from '@/ui/button';
+import { Badge } from '@/ui/badge';
 import { ChevronDown } from 'lucide-react';
 import { memo } from 'react';
 import { useAgentTimeline } from '../../hooks/useAgentTimeline';
@@ -15,8 +18,8 @@ function AgentTimelineBase({
   });
 
   return (
-    <section className="agent-page__panel">
-      <button
+    <Card className="agent-page__panel">
+      <Button variant="ghost"
         type="button"
         className="agent-page__panel-toggle"
         onClick={toggleOpen}
@@ -25,7 +28,7 @@ function AgentTimelineBase({
         <div>
           <div className="agent-page__panel-title-row">
             <h2 className="agent-page__panel-title">步骤列表</h2>
-            <span className="agent-page__panel-badge">{stepCount} 步</span>
+            <Badge className="agent-page__panel-badge">{stepCount} 步</Badge>
           </div>
           <p className="agent-page__panel-subtitle">按后端返回的产品化步骤展示。</p>
         </div>
@@ -33,7 +36,7 @@ function AgentTimelineBase({
           size={18}
           className={`agent-page__collapse-icon${isOpen ? ' agent-page__collapse-icon--open' : ''}`}
         />
-      </button>
+      </Button>
 
       <div
         className={`agent-page__collapse-shell${
@@ -61,7 +64,7 @@ function AgentTimelineBase({
           </div>
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 

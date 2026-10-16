@@ -1,3 +1,5 @@
+import { Textarea } from '@/ui/textarea';
+import { Button } from '@/ui/button';
 import { memo } from 'react';
 import { AlertCircle } from 'lucide-react';
 import type { AgentClarificationCardProps } from '../../types/agent';
@@ -27,16 +29,16 @@ function AgentClarificationCardBase({
       </div>
 
       <div className="agent-page__clarify-box">
-        <textarea
+        <Textarea
           className="agent-page__textarea"
           rows={3}
           value={answer}
           onChange={(event) => onAnswerChange(event.target.value)}
           placeholder="补充一点信息后再提交"
         />
-        <button type="button" className="agent-page__primary-button" onClick={onSubmit}>
+        <Button type="button" className="agent-page__primary-button" onClick={onSubmit}>
           提交回答
-        </button>
+        </Button>
       </div>
     </div>
   );

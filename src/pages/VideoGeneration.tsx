@@ -1,13 +1,14 @@
+import { GenerationAuthGate } from '@/components/generation/GenerationAuthGate';
+import { GenerationPromptForm } from '@/components/generation/GenerationPromptForm';
+import { Button } from '@/ui/button';
 import {
   memo,
   useCallback,
   useEffect,
   useState,
-  type ChangeEvent,
   type FormEvent,
 } from 'react';
-import { message } from 'antd';
-import { LoaderCircle, LogIn, Sparkles } from 'lucide-react';
+import { toast as message } from 'sonner';
 import { useParams } from 'react-router-dom';
 import { GenerationArtifactGallery } from '../components/generation/GenerationArtifactGallery';
 import { GenerationStepTimeline } from '../components/generation/GenerationStepTimeline';
@@ -18,26 +19,6 @@ import {
 } from '../hooks/useVideoGenerationFlow';
 import './Generation.css';
 
-function VideoAuthGate({ onLogin }: { onLogin: () => void }) {
-  return (
-    <div className="generation-page generation-page--video">
-      <section className="generation-page__auth-card">
-        <div className="generation-page__auth-eyebrow">
-          <Sparkles size={14} />
-          <span>AI 文生视频</span>
-        </div>
-        <h1 className="generation-page__auth-title">把一句话变成可播放的视频</h1>
-        <p className="generation-page__auth-text">
-          登录后即可进入文生视频页面，输入提示词并查看步骤与视频产物。
-        </p>
-        <button type="button" className="generation-page__primary-button" onClick={onLogin}>
-          <LogIn size={16} />
-          登录后开始生成
-        </button>
-      </section>
-    </div>
-  );
-}
 
 function VideoGenerationPageBase() {
   const { isAuthenticated, login } = useAuth();
@@ -108,57 +89,17 @@ function VideoGenerationPageBase() {
   );
 
   if (!isAuthenticated) {
-    return <VideoAuthGate onLogin={login} />;
+    return <GenerationAuthGate kind="video" label="AI 文生视频" title="把一句话变成可播放的视频" description="登录后即可进入文生视频页面，输入提示词并查看步骤与视频产物。" onLogin={login} />;
   }
 
   return (
     <div className="generation-page generation-page--video">
       <div className="generation-page__layout generation-page__layout--video">
         <aside className="generation-page__column">
-          <form className="generation-page__card generation-page__form generation-page__form--prompt" onSubmit={handleSubmit}>
-            <div className="generation-page__card-head">
-              <div>
-                <h2 className="generation-page__card-title">提示词模块</h2>
-                <p className="generation-page__card-subtitle">
-                  输入提示词后，点击生成，页面会轮询 `GET /runs/:id` 直到成功。
-                </p>
-              </div>
-              <span className="generation-page__badge">{VIDEO_GENERATION_PRESET_LABEL}</span>
-            </div>
-
-            <label className="generation-page__field generation-page__field--full">
-              <span>提示词 *</span>
-              <textarea
-                value={prompt}
-                disabled={state.isTaskActive || isViewingRun}
-                placeholder="描述你想要生成的视频"
-                onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)}
-                onKeyDown={(event) => {
-                  if (isViewingRun) {
-                    event.preventDefault();
-                    return;
-                  }
-                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                    event.preventDefault();
-                    void handleSubmit();
-                  }
-                }}
-              />
-            </label>
-
-            <button
-              type="submit"
-              className="generation-page__primary-button"
-              disabled={!canSubmit}
-            >
-              {state.isTaskActive ? (
-                <LoaderCircle size={16} className="generation-page__spin" />
-              ) : (
-                <Sparkles size={16} />
-              )}
-              {state.isTaskActive ? '生成中...' : '生成视频'}
-            </button>
-          </form>
+          <GenerationPromptForm presetLabel={VIDEO_GENERATION_PRESET_LABEL} prompt={prompt}
+            placeholder="描述你想要生成的视频" submitLabel="生成视频"
+            busy={state.isTaskActive} readOnly={isViewingRun} canSubmit={canSubmit}
+            onPromptChange={setPrompt} onSubmit={handleSubmit} />
         </aside>
 
         <main className="generation-page__column generation-page__column--main">
@@ -172,9 +113,9 @@ function VideoGenerationPageBase() {
           {state.errorMessage && (
             <div className="generation-page__error-bar">
               <span>{state.errorMessage}</span>
-              <button type="button" onClick={clearError}>
+              <Button variant="outline" type="button" onClick={clearError}>
                 关闭
-              </button>
+              </Button>
             </div>
           )}
 

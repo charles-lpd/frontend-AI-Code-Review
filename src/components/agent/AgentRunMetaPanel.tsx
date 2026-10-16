@@ -1,3 +1,5 @@
+import { Card } from '@/ui/card';
+import { Badge } from '@/ui/badge';
 import { memo } from 'react';
 import type { AgentRunMetaPanelProps } from '../../types/agent';
 
@@ -29,12 +31,12 @@ function AgentRunMetaPanelBase({
   latestCheckpointId,
 }: AgentRunMetaPanelProps) {
   return (
-    <section className="agent-page__panel">
+    <Card className="agent-page__panel">
       <div className="agent-page__panel-toggle" aria-hidden="true">
         <div>
           <div className="agent-page__panel-title-row">
             <h2 className="agent-page__panel-title">运行信息</h2>
-            <span className="agent-page__panel-badge">{statusLabel(status)}</span>
+            <Badge className="agent-page__panel-badge">{statusLabel(status)}</Badge>
           </div>
           <p className="agent-page__panel-subtitle">用于刷新恢复和排查。</p>
         </div>
@@ -74,7 +76,7 @@ function AgentRunMetaPanelBase({
           </div>
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 

@@ -1,3 +1,10 @@
+import { Card } from '@/ui/card';
+import { Badge } from '@/ui/badge';
+import { Label } from '@/ui/label';
+import { Input } from '@/ui/input';
+import { Button } from '@/ui/button';
+import { Textarea } from '@/ui/textarea';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ui/select';
 import {
   useCallback,
   useEffect,
@@ -6,7 +13,10 @@ import {
   useState,
   type ChangeEvent,
 } from 'react';
-import { Modal, Skeleton, Spin, message } from 'antd';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/ui/dialog';
+import { Skeleton } from '@/ui/skeleton';
+import { Spinner } from '@/ui/spinner';
+import { toast as messageApi } from 'sonner';
 import { Link, useParams } from 'react-router-dom';
 import {
   Database,
@@ -24,6 +34,7 @@ import MessageItem from '../components/chat/MessageItem/MessageItem';
 import { sessionApi } from '../api/sessions';
 import { buildPublicSessionUrl } from '../constants';
 import type { KnowledgePreviewResult } from '../api/index';
+import type { ChatMode, KnowledgeFileStatus } from '../types/chat';
 import { useChatStore } from '../store/useChatStore';
 import './ChatDetail.css';
 
@@ -46,10 +57,12 @@ type KnowledgeRefreshResult = {
 };
 
 function getKnowledgeStatusLabel(
-  status?: 'pending' | 'ready' | 'failed',
+  status?: KnowledgeFileStatus,
 ): string {
   switch (status) {
     case 'pending':
+      return '排队中';
+    case 'processing':
       return '索引中';
     case 'failed':
       return '索引失败';
@@ -59,17 +72,28 @@ function getKnowledgeStatusLabel(
   }
 }
 
-function getKnowledgeStatusClass(
-  status?: 'pending' | 'ready' | 'failed',
-): string {
+function getKnowledgeReadinessLabel(readiness?: string) {
+  switch (readiness) {
+    case 'indexing': return '正在建立索引';
+    case 'ready': return '全部可用';
+    case 'mixed': return '部分文件可用';
+    case 'failed': return '索引失败';
+    default: return '尚未上传文件';
+  }
+}
+
+function getKnowledgeStatusVariant(
+  status?: KnowledgeFileStatus,
+): 'info' | 'destructive' | 'success' {
   switch (status) {
     case 'pending':
-      return 'chat-detail-page__knowledge-status--pending';
+    case 'processing':
+      return 'info';
     case 'failed':
-      return 'chat-detail-page__knowledge-status--failed';
+      return 'destructive';
     case 'ready':
     default:
-      return 'chat-detail-page__knowledge-status--ready';
+      return 'success';
   }
 }
 
@@ -83,7 +107,6 @@ function getPreviewErrorMessage(error: any) {
 
 export default function ChatDetail() {
   const { sessionId } = useParams();
-  const [messageApi, contextHolder] = message.useMessage();
   const session = useChatStore((s) =>
     s.sessions.find((item) => item.id === sessionId),
   );
@@ -106,6 +129,7 @@ export default function ChatDetail() {
   const [titleDraft, setTitleDraft] = useState('');
   const [promptDraft, setPromptDraft] = useState('');
   const [isPublicDraft, setIsPublicDraft] = useState(false);
+  const [chatModeDraft, setChatModeDraft] = useState<ChatMode>('auto');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [refreshingKnowledge, setRefreshingKnowledge] = useState(false);
@@ -133,7 +157,7 @@ export default function ChatDetail() {
   const pendingKnowledgeFiles = useMemo(
     () =>
       knowledgeFiles.filter(
-        (file) => (file.indexStatus ?? 'ready') === 'pending',
+        (file) => file.indexStatus === 'pending' || file.indexStatus === 'processing',
       ),
     [knowledgeFiles],
   );
@@ -158,11 +182,13 @@ export default function ChatDetail() {
     setTitleDraft(session?.title ?? '');
     setPromptDraft(session?.manageConfig?.systemPrompt ?? '');
     setIsPublicDraft(session?.manageConfig?.isPublic ?? false);
+    setChatModeDraft(session?.manageConfig?.chatMode ?? 'auto');
   }, [
     session?.id,
     session?.title,
     session?.manageConfig?.systemPrompt,
     session?.manageConfig?.isPublic,
+    session?.manageConfig?.chatMode,
   ]);
 
   const refreshKnowledgeFiles = useCallback(
@@ -174,12 +200,13 @@ export default function ChatDetail() {
       }
 
       try {
-        const files = await sessionApi.listKnowledgeFiles(sessionId);
-        syncSessionKnowledgeFiles(sessionId, files);
+        const state = await sessionApi.getKnowledgeState(sessionId);
+        const files = state.knowledgeFiles;
+        syncSessionKnowledgeFiles(sessionId, files, state.knowledgeReadiness);
         return {
           files: files.length,
           pending: files.filter(
-            (file) => (file.indexStatus ?? 'ready') === 'pending',
+            (file) => file.indexStatus === 'pending' || file.indexStatus === 'processing',
           ).length,
           failed: files.filter(
             (file) => (file.indexStatus ?? 'ready') === 'failed',
@@ -210,11 +237,21 @@ export default function ChatDetail() {
     }
 
     const intervalId = window.setInterval(() => {
-      void refreshKnowledgeFiles(true);
+      if (document.visibilityState === 'visible') void refreshKnowledgeFiles(true);
     }, 3000);
 
     return () => window.clearInterval(intervalId);
   }, [pendingKnowledgeFiles.length, refreshKnowledgeFiles, sessionId, uploading]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && pendingKnowledgeFiles.length > 0) {
+        void refreshKnowledgeFiles(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [pendingKnowledgeFiles.length, refreshKnowledgeFiles]);
 
   useEffect(() => {
     return () => {
@@ -232,6 +269,7 @@ export default function ChatDetail() {
         title: titleDraft.trim() || '新对话',
         isPublic: isPublicDraft,
         systemPrompt: promptDraft,
+        chatMode: chatModeDraft,
       });
       messageApi.success('会话设置已保存');
     } catch (err: any) {
@@ -241,6 +279,7 @@ export default function ChatDetail() {
     }
   }, [
     isPublicDraft,
+    chatModeDraft,
     messageApi,
     promptDraft,
     sessionId,
@@ -253,6 +292,22 @@ export default function ChatDetail() {
       if (!sessionId) return;
       const files = Array.from(event.target.files ?? []);
       if (files.length === 0) return;
+
+      if (knowledgeFiles.length + files.length > 20) {
+        messageApi.error('每个会话最多上传 20 个知识文件');
+        event.target.value = '';
+        return;
+      }
+
+      const allowedExtensions = ['.md', '.txt', '.pdf', '.docx'];
+      const invalidExtensionFile = files.find(
+        (file) => !allowedExtensions.some((extension) => file.name.toLowerCase().endsWith(extension)),
+      );
+      if (invalidExtensionFile) {
+        messageApi.error(`文件类型不支持：${invalidExtensionFile.name}`);
+        event.target.value = '';
+        return;
+      }
 
       const invalidTypeFile = files.find(
         (file) => file.type && !allowedKnowledgeTypes.has(file.type),
@@ -276,7 +331,7 @@ export default function ChatDetail() {
       try {
         await addSessionKnowledgeFiles(sessionId, files);
         await refreshKnowledgeFiles(true);
-        messageApi.success('知识库文件上传成功');
+        messageApi.success('文件已上传，正在等待索引');
         event.target.value = '';
       } catch (err: any) {
         messageApi.error(err.message || '上传知识库文件失败');
@@ -291,6 +346,7 @@ export default function ChatDetail() {
       messageApi,
       sessionId,
       refreshKnowledgeFiles,
+      knowledgeFiles.length,
     ],
   );
 
@@ -330,6 +386,17 @@ export default function ChatDetail() {
       messageApi.error(err.message || '重建知识库失败');
     } finally {
       setRebuildingKnowledge(false);
+    }
+  }, [messageApi, refreshKnowledgeFiles, sessionId]);
+
+  const handleReindexKnowledgeFile = useCallback(async (fileId: string) => {
+    if (!sessionId) return;
+    try {
+      const result = await sessionApi.reindexKnowledgeFile(sessionId, fileId);
+      await refreshKnowledgeFiles(true);
+      messageApi.success(result.deduplicated ? '该文件已有索引任务正在执行' : '已创建重新索引任务');
+    } catch (err: any) {
+      messageApi.error(err.message || '重新索引失败');
     }
   }, [messageApi, refreshKnowledgeFiles, sessionId]);
 
@@ -403,44 +470,59 @@ export default function ChatDetail() {
 
   return (
     <div className="chat-detail-page">
-      {contextHolder}
+
       <div className="chat-detail-page__header">
         <div className="chat-detail-page__header-main">
           <h1>会话设置</h1>
-          <Link to={`/chat/${sessionId}`} className="chat-detail-page__link">
-            返回对话
-          </Link>
+          <Button asChild variant="outline" className="chat-detail-page__link">
+            <Link to={`/chat/${sessionId}`}>返回对话</Link>
+          </Button>
         </div>
       </div>
 
-      <div className="chat-detail-page__card">
+      <Card className="chat-detail-page__card">
         <div className="chat-detail-page__grid">
-          <label className="chat-detail-page__field">
-            <span>会话名称</span>
-            <input
+          <div className="chat-detail-page__field">
+            <Label htmlFor="session-title">会话名称</Label>
+            <Input
+              id="session-title"
               value={titleDraft}
               disabled={saving || uploading}
               onChange={(event) => setTitleDraft(event.target.value)}
             />
-          </label>
-          <label className="chat-detail-page__field chat-detail-page__field--switch">
-            <span>访问权限</span>
-            <button
+          </div>
+          <div className="chat-detail-page__field">
+            <Label htmlFor="session-visibility">访问权限</Label>
+            <Button variant="outline"
+              id="session-visibility"
+              aria-pressed={isPublicDraft}
               type="button"
-              className={`chat-detail-page__visibility${isPublicDraft ? ' chat-detail-page__visibility--public' : ''}`}
+              className="chat-detail-page__visibility w-full justify-start"
               disabled={saving || uploading}
               onClick={() => setIsPublicDraft((prev) => !prev)}
             >
               {isPublicDraft ? <Globe size={16} /> : <Lock size={16} />}
               {isPublicDraft ? '公开' : '私有'}
-            </button>
-          </label>
+            </Button>
+          </div>
+          <div className="chat-detail-page__field">
+            <Label htmlFor="session-mode">问答模式</Label>
+            <Select value={chatModeDraft} disabled={saving || uploading} onValueChange={(value) => setChatModeDraft(value as ChatMode)}>
+              <SelectTrigger id="session-mode" aria-label="问答模式"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">自动：知识库可用时优先检索</SelectItem>
+                <SelectItem value="direct">普通问答：不检索知识库</SelectItem>
+                <SelectItem value="knowledge">知识库：固定检索当前会话文件</SelectItem>
+                <SelectItem value="assistant">高级助手：仅私有问答可使用</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="chat-detail-page__field chat-detail-page__field--full">
-            <span>公开链接</span>
+            <Label htmlFor={publicUrl ? 'session-public-url' : undefined}>公开链接</Label>
             {publicUrl ? (
               <div className="chat-detail-page__public-link-row">
-                <input value={publicUrl} readOnly />
-                <button
+                <Input id="session-public-url" value={publicUrl} readOnly />
+                <Button variant="outline"
                   type="button"
                   className="chat-detail-page__link-action"
                   onClick={async () => {
@@ -454,7 +536,7 @@ export default function ChatDetail() {
                   }}
                 >
                   复制链接
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="chat-detail-page__public-link-empty">
@@ -462,15 +544,17 @@ export default function ChatDetail() {
               </div>
             )}
           </div>
-          <label className="chat-detail-page__field chat-detail-page__field--full">
-            <span>会话 Prompt</span>
-            <textarea
+          <div className="chat-detail-page__field chat-detail-page__field--full">
+            <Label htmlFor="session-prompt">会话 Prompt</Label>
+            <Textarea
+              id="session-prompt"
+              className="min-h-[132px] resize-y"
               value={promptDraft}
               disabled={saving || uploading}
               placeholder="输入该会话的系统提示词"
               onChange={(event) => setPromptDraft(event.target.value)}
             />
-          </label>
+          </div>
         </div>
 
         <div className="chat-detail-page__knowledge">
@@ -482,6 +566,7 @@ export default function ChatDetail() {
               </div>
               <div className="chat-detail-page__knowledge-hint">
                 支持 PDF、Markdown、TXT、DOCX，单文件不超过 10MB
+                {' '}· {getKnowledgeReadinessLabel(session?.manageConfig?.knowledgeReadiness)}
                 {pendingKnowledgeFiles.length > 0 && (
                 <span className="chat-detail-page__knowledge-pending-hint">
                     {' '}
@@ -494,7 +579,7 @@ export default function ChatDetail() {
               </div>
             </div>
             <div className="chat-detail-page__knowledge-actions">
-              <button
+              <Button variant="outline"
                 type="button"
                 className="chat-detail-page__refresh"
                 disabled={saving || uploading || refreshingKnowledge}
@@ -502,8 +587,8 @@ export default function ChatDetail() {
               >
                 <RefreshCcw size={16} />
                 {refreshingKnowledge ? '刷新中...' : '刷新状态'}
-              </button>
-              <button
+              </Button>
+              <Button variant="outline"
                 type="button"
                 className="chat-detail-page__refresh"
                 disabled={saving || uploading || rebuildingKnowledge}
@@ -511,8 +596,8 @@ export default function ChatDetail() {
               >
                 <RotateCcw size={16} />
                 {rebuildingKnowledge ? '重建中...' : '重建索引'}
-              </button>
-              <button
+              </Button>
+              <Button variant="outline"
                 type="button"
                 className="chat-detail-page__refresh"
                 disabled={saving || uploading || checkingKnowledge}
@@ -520,8 +605,8 @@ export default function ChatDetail() {
               >
                 <ShieldAlert size={16} />
                 {checkingKnowledge ? '检查中...' : '一致性检查'}
-              </button>
-              <button
+              </Button>
+              <Button variant="outline"
                 type="button"
                 className="chat-detail-page__upload"
                 disabled={saving || uploading}
@@ -529,7 +614,7 @@ export default function ChatDetail() {
               >
                 <Upload size={16} />
                 {uploading ? '上传中...' : '上传文件'}
-              </button>
+              </Button>
             </div>
             <input
               ref={knowledgeInputRef}
@@ -542,7 +627,7 @@ export default function ChatDetail() {
 
           {uploading && (
             <div className="chat-detail-page__uploading">
-              <Spin size="small" />
+              <Spinner />
               <span>知识库文件上传中，请稍候...</span>
             </div>
           )}
@@ -560,11 +645,9 @@ export default function ChatDetail() {
                       <div className="chat-detail-page__knowledge-name">
                         {file.name}
                       </div>
-                      <span
-                        className={`chat-detail-page__knowledge-status ${getKnowledgeStatusClass(file.indexStatus)}`}
-                      >
+                      <Badge variant={getKnowledgeStatusVariant(file.indexStatus)}>
                         {getKnowledgeStatusLabel(file.indexStatus)}
-                      </span>
+                      </Badge>
                     </div>
                     <div className="chat-detail-page__knowledge-meta">
                       {formatFileSize(file.size)} ·{' '}
@@ -575,7 +658,7 @@ export default function ChatDetail() {
                         {file.indexError}
                       </div>
                     )}
-                    {file.indexStatus === 'pending' && (
+                    {(file.indexStatus === 'pending' || file.indexStatus === 'processing') && (
                       <div className="chat-detail-page__knowledge-error">
                         索引完成后即可参与检索。
                       </div>
@@ -587,23 +670,35 @@ export default function ChatDetail() {
                     )}
                   </div>
                   <div className="chat-detail-page__knowledge-actions">
-                    <button
+                    <Button variant="outline"
+                      type="button"
+                      className="chat-detail-page__refresh"
+                      hidden={file.indexStatus !== 'failed' && file.indexStatus !== 'ready'}
+                      disabled={saving || uploading}
+                      onClick={() => void handleReindexKnowledgeFile(file.id)}
+                    >
+                      <RotateCcw size={14} />
+                      {file.indexStatus === 'ready' ? '强制重建' : '重新索引'}
+                    </Button>
+                    <Button variant="outline"
                       type="button"
                       className="chat-detail-page__preview"
                       disabled={
                         saving ||
                         uploading ||
                         previewLoading ||
+                        file.name.toLowerCase().endsWith('.docx') ||
                         (file.indexStatus ?? 'ready') !== 'ready'
                       }
+                      title={file.name.toLowerCase().endsWith('.docx') ? 'DOCX 暂不支持在线预览' : '预览文件'}
                       onClick={() =>
                         void handlePreviewKnowledge(file.id, file.name)
                       }
                     >
                       <Eye size={14} />
                       预览
-                    </button>
-                    <button
+                    </Button>
+                    <Button variant="ghost"
                       type="button"
                       className="chat-detail-page__delete"
                       disabled={saving || uploading}
@@ -611,7 +706,7 @@ export default function ChatDetail() {
                     >
                       <Trash2 size={14} />
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
@@ -620,32 +715,30 @@ export default function ChatDetail() {
         </div>
 
         <div className="chat-detail-page__footer">
-          <button
+          <Button
             type="button"
             className="chat-detail-page__save"
+            loading={saving}
             disabled={saving || uploading}
             onClick={() => void handleSave()}
           >
             <Save size={16} />
             {saving ? '保存中...' : '保存设置'}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
-      <Modal
-        open={previewState.open}
-        title={previewState.fileName || '知识库预览'}
-        footer={null}
-        width={960}
-        onCancel={handleClosePreview}
-      >
+      <Dialog open={previewState.open} onOpenChange={(open) => { if (!open) handleClosePreview(); }}>
+        <DialogContent className="max-w-[960px]">
+          <DialogTitle>{previewState.fileName || '知识库预览'}</DialogTitle>
+          <DialogDescription className="sr-only">查看当前知识库文件内容</DialogDescription>
         {previewLoading ? (
           <div className="chat-detail-page__preview-loading">
-            <Skeleton active paragraph={{ rows: 8 }} />
+            <div className="space-y-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="h-4 w-full" />)}</div>
           </div>
         ) : !previewState.data ? (
           <div className="chat-detail-page__preview-loading">
-            <Spin />
+            <Spinner />
           </div>
         ) : previewState.data.kind === 'pdf' ? (
           <iframe
@@ -662,7 +755,8 @@ export default function ChatDetail() {
             {previewState.data.text}
           </pre>
         )}
-      </Modal>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

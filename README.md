@@ -8,6 +8,15 @@
 
 项目整体以“会话 + 知识库 + 生成任务”作为核心信息架构，支持桌面端和移动端使用。
 
+## UI 与主题
+
+- 基础组件保存在 `src/ui`，采用 shadcn/ui 风格、Radix UI 和 Tailwind CSS 4；图标使用 Lucide，消息提示使用 Sonner。
+- `src/style.css` 是主题 Token 的唯一配置入口，采用 Neutral 黑白灰主色；成功、警告、错误和信息色只用于业务状态。
+- 类名合并使用 `@/lib/utils` 的 `cn()`；`@/*` 指向 `src/*`，`components.json` 配置为本地组件目录。
+- 页面布局 CSS 位于 `components` 样式层，本地组件的 Tailwind 工具类负责统一控件样式。全局样式必须在应用组件前加载，确保样式层级顺序稳定。
+- 聊天和审查共享 `src/components/workspace` 中的布局组件，仍使用原生消息滚动容器；移动端侧栏使用 Sheet，删除和清空操作使用异步确认弹窗。
+- 不再依赖 Ant Design；表单、请求、Store 和 SSE 协议沿用现有实现。
+
 ## 能力统计
 
 ### 1. AI 知识库

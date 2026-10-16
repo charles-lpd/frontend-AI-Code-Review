@@ -37,6 +37,7 @@ interface ChatStore {
   syncSessionKnowledgeFiles: (
     sessionId: string,
     files: SessionKnowledgeFile[],
+    readiness?: import('../types/chat').KnowledgeReadiness,
   ) => void;
   removeSessionKnowledgeFile: (
     sessionId: string,
@@ -66,6 +67,8 @@ function getDefaultManageConfig() {
   return {
     isPublic: false,
     systemPrompt: '',
+    chatMode: 'auto' as const,
+    knowledgeReadiness: 'empty' as const,
     knowledgeFiles: [],
   };
 }
@@ -104,8 +107,8 @@ export const useChatStore = create<ChatStore>()(
                       lastCursor: localSession.lastCursor,
                       draft: localSession.draft,
                       manageConfig:
-                        localSession.manageConfig ??
-                        backendSession.manageConfig,
+                        backendSession.manageConfig ??
+                        localSession.manageConfig,
                     };
                   }
                   return localSession;
@@ -165,11 +168,17 @@ export const useChatStore = create<ChatStore>()(
                 sessions: state.sessions.map((s) => {
                   if (s.id !== id) return s;
 
-                  const existingIds = new Set(s.messages.map((m) => m.id));
-                  const mergedMessages = [
-                    ...s.messages,
-                    ...newMessages.filter((m) => !existingIds.has(m.id)),
-                  ].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                  const mergedById = new Map(s.messages.map((m) => [m.id, m]));
+                  newMessages.forEach((m) => {
+                    const local = mergedById.get(m.id);
+                    // An active local stream owns its draft until it settles.
+                    if (local?.status !== 'generating') {
+                      mergedById.set(m.id, { ...local, ...m, metadata: m.metadata ?? local?.metadata });
+                    }
+                  });
+                  const mergedMessages = [...mergedById.values()].sort(
+                    (a, b) => (a.createdAt || 0) - (b.createdAt || 0),
+                  );
 
                   return {
                     ...s,
@@ -315,6 +324,7 @@ export const useChatStore = create<ChatStore>()(
             typeof patch.systemPrompt === 'string'
               ? patch.systemPrompt
               : undefined,
+          chatMode: patch.chatMode,
         });
         set((state) => ({
           sessions: state.sessions.map((s) =>
@@ -333,7 +343,7 @@ export const useChatStore = create<ChatStore>()(
       },
 
       addSessionKnowledgeFiles: async (sessionId, files) => {
-        const knowledgeFiles = await sessionApi.uploadKnowledge(
+        const result = await sessionApi.uploadKnowledge(
           sessionId,
           files,
         );
@@ -345,7 +355,9 @@ export const useChatStore = create<ChatStore>()(
                   manageConfig: {
                     ...getDefaultManageConfig(),
                     ...s.manageConfig,
-                    knowledgeFiles,
+                    knowledgeFiles: result.knowledgeFiles,
+                    knowledgeReadiness:
+                      result.knowledgeReadiness ?? s.manageConfig?.knowledgeReadiness ?? 'indexing',
                   },
                 }
               : s,
@@ -353,7 +365,7 @@ export const useChatStore = create<ChatStore>()(
         }));
       },
 
-      syncSessionKnowledgeFiles: (sessionId, files) => {
+      syncSessionKnowledgeFiles: (sessionId, files, readiness) => {
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === sessionId
@@ -363,6 +375,7 @@ export const useChatStore = create<ChatStore>()(
                     ...getDefaultManageConfig(),
                     ...s.manageConfig,
                     knowledgeFiles: files,
+                    knowledgeReadiness: readiness ?? s.manageConfig?.knowledgeReadiness ?? 'empty',
                   },
                 }
               : s,
@@ -406,9 +419,9 @@ export const useChatStore = create<ChatStore>()(
             s.id === sessionId
               ? {
                   ...s,
-                  messages: s.messages.map((m) =>
-                    m.id === messageId ? { ...m, ...patch } : m,
-                  ),
+                  messages: s.messages
+                    .filter((m) => m.id === messageId || !patch.id || m.id !== patch.id)
+                    .map((m) => m.id === messageId ? { ...m, ...patch } : m),
                 }
               : s,
           ),

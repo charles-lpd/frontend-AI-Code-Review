@@ -3,6 +3,19 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': new URL('./src', import.meta.url).pathname,
+      // Radix primitives and the application must share the exact same React
+      // module instance, otherwise hooks resolve against different dispatchers.
+      react: new URL('./node_modules/react', import.meta.url).pathname,
+      'react-dom': new URL('./node_modules/react-dom', import.meta.url).pathname,
+    },
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', '@radix-ui/react-tooltip'],
+  },
   plugins: [react(), tailwindcss()],
   build: {
     target: 'es2020',
@@ -23,10 +36,6 @@ export default defineConfig({
             )
           ) {
             return 'react-core';
-          }
-
-          if (/[\\/]node_modules[\\/]antd[\\/]/.test(id)) {
-            return 'antd';
           }
 
           if (

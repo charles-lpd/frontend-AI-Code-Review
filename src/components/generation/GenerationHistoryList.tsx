@@ -1,3 +1,6 @@
+import { Card } from '@/ui/card';
+import { Badge } from '@/ui/badge';
+import { Button } from '@/ui/button';
 import { memo, useMemo } from 'react';
 import { Copy, RefreshCcw, Trash2 } from 'lucide-react';
 import type { GenerationHistoryItem } from '../../types/generation';
@@ -41,13 +44,13 @@ function GenerationHistoryListBase({
   const orderedHistory = useMemo(() => history, [history]);
 
   return (
-    <section className="generation-page__card generation-page__history">
+    <Card className="generation-page__card generation-page__history">
       <div className="generation-page__card-head">
         <div>
           <h2 className="generation-page__card-title">历史任务</h2>
           <p className="generation-page__card-subtitle">点击可恢复单条任务详情。</p>
         </div>
-        <span className="generation-page__badge">{orderedHistory.length} 条</span>
+        <Badge className="generation-page__badge">{orderedHistory.length} 条</Badge>
       </div>
 
       <div className="generation-page__history-list">
@@ -57,7 +60,7 @@ function GenerationHistoryListBase({
               key={item.runId}
               className={`generation-page__history-item${item.runId === currentRunId ? ' generation-page__history-item--active' : ''}`}
             >
-              <button
+              <Button variant="outline"
                 type="button"
                 className="generation-page__history-main"
                 onClick={() => onSelect(item.runId)}
@@ -66,9 +69,9 @@ function GenerationHistoryListBase({
                   <span className="generation-page__history-title">
                     {item.title || item.promptSummary || item.runId}
                   </span>
-                  <span className={`generation-page__status-badge generation-page__status-badge--${item.status}`}>
+                  <Badge className={`generation-page__status-badge generation-page__status-badge--${item.status}`}>
                     {statusText(item.status)}
-                  </span>
+                  </Badge>
                 </div>
                 <div className="generation-page__history-meta">
                   <span>{new Date(item.updatedAt).toLocaleString()}</span>
@@ -79,20 +82,20 @@ function GenerationHistoryListBase({
                   {item.model && <span>{item.model}</span>}
                 </div>
                 <div className="generation-page__history-summary">{item.promptSummary}</div>
-              </button>
+              </Button>
               <div className="generation-page__history-actions">
-                <button type="button" className="generation-page__ghost-button generation-page__ghost-button--small" onClick={() => onCopyRunId(item.runId)}>
+                <Button variant="outline" type="button" className="generation-page__ghost-button generation-page__ghost-button--small" onClick={() => onCopyRunId(item.runId)}>
                   <Copy size={13} />
                   复制
-                </button>
-                <button type="button" className="generation-page__ghost-button generation-page__ghost-button--small" onClick={() => onRetry(item.runId)}>
+                </Button>
+                <Button variant="outline" type="button" className="generation-page__ghost-button generation-page__ghost-button--small" onClick={() => onRetry(item.runId)}>
                   <RefreshCcw size={13} />
                   重试
-                </button>
-                <button type="button" className="generation-page__ghost-button generation-page__ghost-button--small generation-page__ghost-button--danger" onClick={() => onDelete(item.runId)}>
+                </Button>
+                <Button variant="outline" type="button" className="generation-page__ghost-button generation-page__ghost-button--small generation-page__ghost-button--danger" onClick={() => onDelete(item.runId)}>
                   <Trash2 size={13} />
                   删除
-                </button>
+                </Button>
               </div>
             </article>
           ))
@@ -100,7 +103,7 @@ function GenerationHistoryListBase({
           <div className="generation-page__empty-note">这里还没有任务，先创建一个新的生成任务吧。</div>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 

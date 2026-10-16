@@ -1,4 +1,4 @@
-import { message } from 'antd';
+import { toast as message } from 'sonner';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BACKEND_API_BASE_URL } from '../constants';

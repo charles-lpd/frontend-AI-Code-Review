@@ -1,5 +1,9 @@
+import { Button } from '@/ui/button';
 import { Suspense, lazy, useMemo } from 'react';
 import { NavLink, Route, Routes, Link, useLocation } from 'react-router-dom';
+import { Avatar, AvatarImage, AvatarFallback } from '@/ui/avatar';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/ui/dropdown-menu';
+import { Spinner } from '@/ui/spinner';
 import { useAuth } from './hooks/useAuth';
 import './App.css';
 
@@ -90,29 +94,31 @@ export default function App() {
         <div className="nav__right">
           {isAuthenticated && user ? (
             <div className="user-profile">
-              <Link to="/profile" className="user-info-link">
-                <img
-                  src={user.avatarUrl}
-                  alt={user.name}
-                  className="user-avatar"
-                />
-                <span className="user-name">{user.name || user.login}</span>
-              </Link>
-              <button onClick={logout} className="logout-btn">
-                退出
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="user-info-link" aria-label="用户菜单">
+                    <Avatar className="size-7"><AvatarImage src={user.avatarUrl} alt={user.name || user.login} /><AvatarFallback>{(user.name || user.login).slice(0, 1)}</AvatarFallback></Avatar>
+                    <span className="user-name">{user.name || user.login}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild><Link to="/profile">个人中心</Link></DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={logout}>退出</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ) : (
-            <button onClick={login} className="login-btn">
+            <Button onClick={login} className="login-btn">
               连接 GitHub
-            </button>
+            </Button>
           )}
         </div>
       </nav>
       <main
         className={`app__main${isMobileChatRoute ? ' app__main--chat-mobile' : ''}${isChatWorkspaceRoute ? ' app__main--chat-workspace' : ''}`}
       >
-        <Suspense fallback={<div className="app__loading w-full h-full flex items-center justify-center">加载中...</div>}>
+        <Suspense fallback={<div className="app__loading w-full h-full flex items-center justify-center gap-2"><Spinner />加载中...</div>}>
           {routeContent}
         </Suspense>
       </main>

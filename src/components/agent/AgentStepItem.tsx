@@ -1,3 +1,4 @@
+import { Button } from '@/ui/button';
 import { memo } from 'react';
 import type { AgentStepItemProps } from '../../types/agent';
 
@@ -25,7 +26,7 @@ function AgentStepItemBase({
   onClick,
 }: AgentStepItemProps) {
   return (
-    <button
+    <Button variant="outline"
       type="button"
       className={`agent-page__step-item${
         isActive ? ' agent-page__step-item--active' : ''
@@ -70,7 +71,7 @@ function AgentStepItemBase({
       <span className={`agent-page__step-status agent-page__step-status--${step.stepStatus}`}>
         {stepStatusText(step.stepStatus)}
       </span>
-    </button>
+    </Button>
   );
 }
 
