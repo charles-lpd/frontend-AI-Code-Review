@@ -24,6 +24,15 @@
   font-size: 12px;
 }
 
+.message-item__pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 14px;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

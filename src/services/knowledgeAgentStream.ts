@@ -110,7 +110,25 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
 
     if (event.event === 'agent_finished') {
       if (event.citations?.length) mergeCitations(event.citations);
+      // 回答结束：把仍在 running 的步骤全部标记为完成，并更新 agent 自身这一步的结束状态与文案
+      const steps: Record<string, KnowledgeAgentStep> = {};
+      for (const [key, step] of Object.entries(state.steps)) {
+        steps[key] = step.stepStatus === 'running' ? { ...step, stepStatus: 'completed' } : step;
+      }
+      const previous = state.steps[event.stepKey];
+      steps[event.stepKey] = {
+        stepKey: event.stepKey,
+        stepLabel: event.stepLabel || previous?.stepLabel || event.stepKey,
+        stepStatus: 'completed',
+        stepIndex: event.stepIndex ?? previous?.stepIndex ?? 0,
+        stepTotal: event.stepTotal ?? previous?.stepTotal ?? 0,
+        seq: event.seq,
+        timestamp: event.timestamp,
+        durationMs: event.durationMs ?? previous?.durationMs,
+        message: previous?.message,
+      };
       publish({
+        steps,
         status: event.truncated ? 'truncated' : 'completed',
         finishReason: event.finishReason ?? state.finishReason,
       });
@@ -124,7 +142,8 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
     const step: KnowledgeAgentStep = {
       stepKey: event.stepKey,
       stepLabel: event.stepLabel || previous?.stepLabel || event.stepKey,
-      stepStatus: event.stepStatus,
+      // *_started 事件若未携带 stepStatus，按进行中处理，避免步骤没有运行态
+      stepStatus: event.stepStatus ?? (event.event.endsWith('_started') ? 'running' : 'completed'),
       stepIndex: event.stepIndex ?? previous?.stepIndex ?? 0,
       stepTotal: event.stepTotal ?? previous?.stepTotal ?? 0,
       seq: event.seq,

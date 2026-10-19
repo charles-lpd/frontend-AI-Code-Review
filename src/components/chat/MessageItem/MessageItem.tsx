@@ -122,6 +122,13 @@ const MessageItem = memo(function MessageItem({
   const metadata = live?.metadata ?? savedMetadata;
   const processedContent = content;
   const knowledgeAgent = metadata?.knowledgeAgent;
+  // 请求已发出但还没有任何内容或步骤（连接中）：显示等待提示，而不是一个空气泡
+  const awaitingFirstReply =
+    role === 'assistant' &&
+    !processedContent &&
+    !knowledgeAgent?.error &&
+    Object.keys(knowledgeAgent?.steps ?? {}).length === 0 &&
+    (live?.streaming ?? streaming ?? (knowledgeAgent?.status === 'connecting'));
   const citations = knowledgeAgent?.citations?.length ? knowledgeAgent.citations : metadata?.citations ?? [];
   const icon = useMemo(() => {
     switch (role) {
@@ -149,6 +156,11 @@ const MessageItem = memo(function MessageItem({
           <div className="message-item__tool-output">
             <div className="message-item__tool-label">工具调用结果</div>
             <pre>{content}</pre>
+          </div>
+        ) : awaitingFirstReply ? (
+          <div className="message-item__pending">
+            <LoaderCircle size={15} className="knowledge-agent__spinner" />
+            <span>正在连接…</span>
           </div>
         ) : (
           <MarkdownContent content={processedContent} streaming={live?.streaming ?? streaming} />
