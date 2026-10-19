@@ -185,8 +185,8 @@ export const useChatStore = create<ChatStore>()(
                     ...detail,
                     messages: mergedMessages,
                     detailsLoaded: true,
-                    hasMore: newMessages.length >= limit,
-                    lastCursor: newMessages[0]?.id || s.lastCursor,
+                    hasMore: detail.hasMore ?? false,
+                    lastCursor: detail.nextCursor ?? s.lastCursor,
                   };
                 }),
               }));
@@ -209,8 +209,8 @@ export const useChatStore = create<ChatStore>()(
                     ...detail,
                     messages,
                     detailsLoaded: true,
-                    hasMore: messages.length >= limit,
-                    lastCursor: messages[0]?.id,
+                    hasMore: detail.hasMore ?? false,
+                    lastCursor: detail.nextCursor ?? undefined,
                   }
                 : s,
             ),
@@ -247,8 +247,8 @@ export const useChatStore = create<ChatStore>()(
                 ? {
                     ...s,
                     messages: [...newMessages, ...(s.messages || [])],
-                    hasMore: newMessages.length >= limit,
-                    lastCursor: newMessages[0]?.id || s.lastCursor,
+                    hasMore: detail.hasMore ?? false,
+                    lastCursor: detail.nextCursor ?? undefined,
                     isLoadingMore: false,
                   }
                 : s,

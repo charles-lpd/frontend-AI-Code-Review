@@ -1,5 +1,6 @@
 @layer components {
 .chat {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -8,6 +9,14 @@
   overflow: hidden;
   background:
     hsl(var(--background));
+}
+
+/* Overlay the jump button so it doesn't take layout height from the message list. */
+.chat__latest-button {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1rem;
+  z-index: 10;
 }
 
 

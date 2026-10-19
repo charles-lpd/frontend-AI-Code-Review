@@ -13,11 +13,9 @@ export const BACKEND_API_BASE_URL = configuredApiOrigin
 
 export const CHAT_API_PATH = '/chat';
 export const PUBLIC_CHAT_API_PATH = '/public/chat';
-export const CODE_REVIEW_API_PATH = '/code-review';
-export const AGENT_API_PATH = '/agent';
-export const IMAGE_GENERATION_API_PATH = '/image';
-export const VIDEO_GENERATION_API_PATH = '/video';
 export const GITHUB_API_PREFIX = '/github';
+/** GitHub App 安装页地址，例如 https://github.com/apps/<app-slug>/installations/new，由环境变量配置 */
+export const GITHUB_APP_INSTALL_URL: string = import.meta.env.VITE_GITHUB_APP_INSTALL_URL ?? '';
 export const SESSIONS_API_PREFIX = '/sessions';
 export const PUBLIC_SESSION_PATH_PREFIX = '/public/session';
 

@@ -2,7 +2,7 @@ import { createStore } from 'zustand/vanilla';
 import type { ChatMessage } from '../types/chat';
 
 export interface StreamIdentity {
-  scope: 'private-chat' | 'public-chat' | 'code-review';
+  scope: 'private-chat' | 'public-chat';
   conversationId: string;
   requestId: string;
 }

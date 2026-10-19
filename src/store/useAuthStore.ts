@@ -42,6 +42,9 @@ export const useAuthStore = create<AuthState>()(
               Authorization: `Bearer ${token}`,
             },
           });
+          // 滑动续期：后端可能在响应头返回新 token，需要替换本地保存的值
+          const refreshed = response.headers.get('X-Refreshed-Token');
+          if (refreshed) set({ token: refreshed });
           if (response.ok) {
             const user = await response.json();
             set({ user });

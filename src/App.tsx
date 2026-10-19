@@ -5,16 +5,13 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/ui/avatar';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/ui/dropdown-menu';
 import { Spinner } from '@/ui/spinner';
 import { useAuth } from './hooks/useAuth';
+import LoginDialog from './components/LoginDialog';
 import './App.css';
 
 const Home = lazy(() => import('./pages/Home'));
 const Profile = lazy(() => import('./pages/Profile'));
 const ChatDetail = lazy(() => import('./pages/ChatDetail'));
 const PublicSession = lazy(() => import('./pages/PublicSession'));
-const CodeReview = lazy(() => import('./pages/CodeReview'));
-// const AgentPage = lazy(() => import('./pages/Agent'));
-const ImageGeneration = lazy(() => import('./pages/ImageGeneration'));
-const VideoGeneration = lazy(() => import('./pages/VideoGeneration'));
 
 export default function App() {
   const location = useLocation();
@@ -29,14 +26,6 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/chat/:sessionId" element={<Home />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/code-review" element={<CodeReview />} />
-        <Route path="/code-review/:reviewId" element={<CodeReview />} />
-        {/* <Route path="/agent" element={<Agen。tPage />} /> */}
-        {/* <Route path="/agent/:runId" element={<AgentPage />} /> */}
-        <Route path="/image-generation" element={<ImageGeneration />} />
-        <Route path="/image-generation/:runId" element={<ImageGeneration />} />
-        <Route path="/video-generation" element={<VideoGeneration />} />
-        <Route path="/video-generation/:runId" element={<VideoGeneration />} />
         <Route path="/chat-details/:sessionId" element={<ChatDetail />} />
         <Route path="/public/session/:id" element={<PublicSession />} />
       </Routes>
@@ -56,38 +45,6 @@ export default function App() {
               `nav__tab${isActive ? ' nav__tab--active' : ''}`
             }>
             对话
-          </NavLink>
-          <NavLink
-            to="/code-review"
-            className={({ isActive }) =>
-              `nav__tab${isActive ? ' nav__tab--active' : ''}`
-            }
-          >
-            审查
-          </NavLink>
-          {/* <NavLink
-            to="/agent"
-            className={({ isActive }) =>
-              `nav__tab${isActive ? ' nav__tab--active' : ''}`
-            }
-          >
-            Agent
-          </NavLink> */}
-          <NavLink
-            to="/image-generation"
-            className={({ isActive }) =>
-              `nav__tab${isActive ? ' nav__tab--active' : ''}`
-            }
-          >
-            文生图
-          </NavLink>
-          <NavLink
-            to="/video-generation"
-            className={({ isActive }) =>
-              `nav__tab${isActive ? ' nav__tab--active' : ''}`
-            }
-          >
-            文生视频
           </NavLink>
         </div>
 
@@ -122,6 +79,7 @@ export default function App() {
           {routeContent}
         </Suspense>
       </main>
+      <LoginDialog />
     </div>
   );
 }

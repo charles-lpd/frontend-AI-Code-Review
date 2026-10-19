@@ -18,6 +18,12 @@
 
 .message-item__citations ol { margin: 6px 0 0; padding-left: 20px; }
 
+.message-item__notice {
+  margin-top: 8px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

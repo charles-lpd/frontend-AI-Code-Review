@@ -300,7 +300,7 @@ const ChatPanel = memo(function ChatPanel({
         </div>
       </WorkspaceHeader>
 
-      {showLatest && <Button variant="outline" onClick={scrollToLatest}>回到最新</Button>}
+      {showLatest && <Button className="chat__latest-button" variant="outline" onClick={scrollToLatest}>回到最新</Button>}
       <ChatMessages
         listRef={listRef}
         onScroll={handleScroll}

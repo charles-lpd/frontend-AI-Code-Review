@@ -8,7 +8,9 @@ export type ApiErrorCode =
   | 'PUBLIC_SESSION_NOT_FOUND' | 'KNOWLEDGE_NOT_READY' | 'KNOWLEDGE_INDEX_FAILED'
   | 'EMBEDDING_UNAVAILABLE' | 'EMBEDDING_DIMENSION_MISMATCH' | 'LLM_UNAVAILABLE'
   | 'LLM_TIMEOUT' | 'TOOL_FAILED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'
-  | 'CHAT_IN_PROGRESS' | 'IDEMPOTENCY_CONFLICT' | 'CHAT_RETRY_CONFLICT';
+  | 'CHAT_IN_PROGRESS' | 'IDEMPOTENCY_CONFLICT' | 'CHAT_RETRY_CONFLICT'
+  | 'LLM_STREAM_INCOMPLETE' | 'GITHUB_UNAVAILABLE' | 'OAUTH_STATE_INVALID'
+  | 'GITHUB_AUTH_EXPIRED' | 'GITHUB_AUTH_FAILED';
 
 export interface Citation {
   citationId: string;
@@ -22,7 +24,7 @@ export interface Citation {
 
 /** 消息状态 */
 export type MessageStatus = 'pending' | 'sending' | 'error' | 'success'
-  | 'generating' | 'completed' | 'failed' | 'aborted';
+  | 'generating' | 'completed' | 'truncated' | 'failed' | 'aborted';
 
 export interface SessionKnowledgeFile {
   id: string;
@@ -99,7 +101,8 @@ export interface KnowledgeAgentStep {
 export interface KnowledgeAgentStreamState {
   answer: string;
   steps: Record<string, KnowledgeAgentStep>;
-  status: 'idle' | 'connecting' | 'retrieving' | 'generating' | 'completed' | 'failed' | 'aborted';
+  status: 'idle' | 'connecting' | 'retrieving' | 'generating' | 'completed' | 'truncated' | 'failed' | 'aborted';
+  finishReason?: string | null;
   executionMode?: ChatMode;
   requestId?: string;
   citations: Citation[];
@@ -115,41 +118,6 @@ export interface ToolCall {
     name: string;
     arguments: string; // JSON string
   };
-}
-
-export interface ReviewDimensionSection {
-  name: string;
-  content: string;
-  loading?: boolean;
-  ok?: boolean;
-  duration?: number;
-}
-
-export interface ReviewStreamMetadata {
-  kind: 'code_review';
-  statusText: string;
-  dimensions: ReviewDimensionSection[];
-  summaryText: string;
-  finalText: string;
-}
-
-export interface ReviewStreamChunk {
-  text: string;
-  type:
-    | 'status'
-    | 'dimension_start'
-    | 'dimension_header'
-    | 'dimension_chunk'
-    | 'dimension_done'
-    | 'summary_header'
-    | 'summary_chunk'
-    | 'summary_done'
-    | 'comment_status'
-    | 'final';
-  phase: 'fetch' | 'review' | 'summary' | 'comment' | 'final';
-  dimension?: string;
-  duration?: number;
-  ok?: boolean;
 }
 
 export interface StreamingAssistantState {
@@ -174,7 +142,6 @@ export interface ChatMessage {
   metadata?: {
     citations?: Citation[];
     thought?: string; // 思维链
-    reviewStream?: ReviewStreamMetadata;
     knowledgeAgent?: KnowledgeAgentStreamState;
     [key: string]: any;
   };
@@ -199,8 +166,10 @@ export interface ChatSession {
   detailsLoaded?: boolean;
   /** 是否还有更多历史记录 */
   hasMore?: boolean;
-  /** 用于分页的游标（最旧的一条消息 ID） */
+  /** 用于分页的游标（最旧的一条消息 ID）；由后端 nextCursor 提供 */
   lastCursor?: string;
+  /** 后端分页返回的下一页游标（即当前页最旧消息的 ID） */
+  nextCursor?: string | null;
   /** 是否正在加载更多消息 */
   isLoadingMore?: boolean;
   /** 会话配置，如模型名称、温度等 */

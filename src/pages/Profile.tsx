@@ -7,9 +7,9 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { githubApi, type GithubRepo } from '../api/github';
-import { imageGenerationApi, videoGenerationApi } from '../api/generation';
 import { useChatStore } from '../store/useChatStore';
-import type { GenerationRunListItem } from '../types/generation';
+import { useLoginDialogStore } from '../store/useLoginDialogStore';
+import { GITHUB_APP_INSTALL_URL } from '../constants';
 import {
   User,
   ExternalLink,
@@ -20,36 +20,8 @@ import {
   MessageSquare,
   Globe,
   Lock,
-  Image as ImageIcon,
-  Video,
 } from 'lucide-react';
 import './Profile.css';
-
-type ProfileTab = 'repos' | 'images' | 'videos';
-
-function generationStatusLabel(status: string) {
-  switch (status) {
-    case 'queued':
-      return '排队中';
-    case 'running':
-      return '生成中';
-    case 'succeeded':
-      return '已完成';
-    case 'failed':
-      return '失败';
-    case 'cancelled':
-      return '已取消';
-    case 'rejected':
-      return '被拦截';
-    default:
-      return status;
-  }
-}
-
-function formatRunTime(value: GenerationRunListItem['updatedAt']) {
-  if (!value) return '时间未知';
-  return new Date(value).toLocaleString();
-}
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -59,18 +31,14 @@ export default function Profile() {
   const fetchSessions = useChatStore((s) => s.fetchSessions);
   const createSession = useChatStore((s) => s.createSession);
   const [repos, setRepos] = useState<GithubRepo[]>([]);
-  const [imageRuns, setImageRuns] = useState<GenerationRunListItem[]>([]);
-  const [videoRuns, setVideoRuns] = useState<GenerationRunListItem[]>([]);
-  const [activeTab, setActiveTab] = useState<ProfileTab>('repos');
   const [loading, setLoading] = useState(false);
-  const [generationLoading, setGenerationLoading] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
       void fetchRepos();
-      void fetchGenerationRuns();
       if (!hasFetched) {
         void fetchSessions();
       }
@@ -80,32 +48,19 @@ export default function Profile() {
   const fetchRepos = async () => {
     setLoading(true);
     setError(null);
+    setErrorCode(null);
     try {
       const data = await githubApi.getUserRepos();
       setRepos(data);
     } catch (err: any) {
       setError(err.message || '获取仓库列表失败');
+      setErrorCode(err.code ?? null);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchGenerationRuns = async () => {
-    setGenerationLoading(true);
-    setError(null);
-    try {
-      const [images, videos] = await Promise.all([
-        imageGenerationApi.listRuns(),
-        videoGenerationApi.listRuns(),
-      ]);
-      setImageRuns(images);
-      setVideoRuns(videos);
-    } catch (err: any) {
-      setError(err.message || '获取生成记录失败');
-    } finally {
-      setGenerationLoading(false);
-    }
-  };
+  const needsGithubReauth = errorCode === 'GITHUB_AUTH_EXPIRED' || errorCode === 'GITHUB_AUTH_FAILED';
 
   const handleCreateSession = async () => {
     setCreatingSession(true);
@@ -203,28 +158,20 @@ export default function Profile() {
           )}
         </Card>
 
-        <Card className="profile__panel"><Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ProfileTab)}>
+        <Card className="profile__panel"><Tabs value="repos">
           <div className="profile__tabs-header">
             <TabsList aria-label="个人资源" className="max-w-full overflow-x-auto">
               <TabsTrigger value="repos">
                 <Code size={16} />
                 仓库 ({repos.length})
               </TabsTrigger>
-              <TabsTrigger value="images">
-                <ImageIcon size={16} />
-                图片 ({imageRuns.length})
-              </TabsTrigger>
-              <TabsTrigger value="videos">
-                <Video size={16} />
-                视频 ({videoRuns.length})
-              </TabsTrigger>
             </TabsList>
             <Button variant="outline"
               className="profile__refresh"
-              onClick={activeTab === 'repos' ? fetchRepos : fetchGenerationRuns}
-              disabled={activeTab === 'repos' ? loading : generationLoading}
+              onClick={fetchRepos}
+              disabled={loading}
             >
-              {(activeTab === 'repos' ? loading : generationLoading) ? (
+              {loading ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
                 '刷新列表'
@@ -235,6 +182,11 @@ export default function Profile() {
           {error && (
             <div className="profile__error">
               <p>{error}</p>
+              {needsGithubReauth && (
+                <Button variant="outline" onClick={() => useLoginDialogStore.getState().setOpen(true)}>
+                  重新授权 GitHub
+                </Button>
+              )}
             </div>
           )}
 
@@ -247,7 +199,17 @@ export default function Profile() {
                 </div>
               ) : repos.length === 0 ? (
                 <div className="profile__empty-card">
-                  <p>暂无仓库数据。</p>
+                  {error ? null : (
+                    <>
+                      <p>暂无可访问的仓库。如果还没有为账号安装 GitHub App，请先安装并选择需要授权的仓库，然后点击"刷新列表"。</p>
+                      {GITHUB_APP_INSTALL_URL && (
+                        <a href={GITHUB_APP_INSTALL_URL} target="_blank" rel="noopener noreferrer" className="repo-card__link">
+                          <ExternalLink size={14} />
+                          前往安装 GitHub App
+                        </a>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 repos.map((repo) => (
@@ -290,86 +252,8 @@ export default function Profile() {
               )}
             </div>
           </TabsContent>
-
-          <TabsContent value="images">
-            <GenerationRunGrid
-              emptyText="暂无图片生成记录。"
-              isLoading={generationLoading}
-              runs={imageRuns}
-              toPath={(runId) => `/image-generation/${runId}`}
-            />
-          </TabsContent>
-
-          <TabsContent value="videos">
-            <GenerationRunGrid
-              emptyText="暂无视频生成记录。"
-              isLoading={generationLoading}
-              runs={videoRuns}
-              toPath={(runId) => `/video-generation/${runId}`}
-            />
-          </TabsContent>
         </Tabs></Card>
       </div>
-    </div>
-  );
-}
-
-function GenerationRunGrid({
-  emptyText,
-  isLoading,
-  runs,
-  toPath,
-}: {
-  emptyText: string;
-  isLoading: boolean;
-  runs: GenerationRunListItem[];
-  toPath: (runId: string) => string;
-}) {
-  if (isLoading && runs.length === 0) {
-    return (
-      <div className="profile__loading">
-        <Loader2 size={32} className="animate-spin" />
-        <p>正在拉取生成记录...</p>
-      </div>
-    );
-  }
-
-  if (runs.length === 0) {
-    return (
-      <div className="profile__empty-card">
-        <p>{emptyText}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="profile__generation-grid">
-      {runs.map((run) => (
-        <Link
-          key={run.runId}
-          to={toPath(run.runId)}
-          className="generation-run-card"
-        >
-          <div className="generation-run-card__header">
-            <span className={`generation-run-card__status generation-run-card__status--${run.status}`}>
-              {generationStatusLabel(String(run.status))}
-            </span>
-            <span className="generation-run-card__date">
-              {formatRunTime(run.updatedAt)}
-            </span>
-          </div>
-          <h3 className="generation-run-card__title">
-            {run.prompt || '未命名生成任务'}
-          </h3>
-          <div className="generation-run-card__meta">
-            {run.currentStep && <span>步骤: {run.currentStep}</span>}
-            {typeof run.progress === 'number' && <span>进度: {run.progress}%</span>}
-            {typeof run.artifactCount === 'number' && (
-              <span>产物: {run.artifactCount}</span>
-            )}
-          </div>
-        </Link>
-      ))}
     </div>
   );
 }

@@ -4,6 +4,12 @@ import { chatActions } from '../store/useChatStore';
 import type { ChatMessage, KnowledgeAgentStreamState, StreamingAssistantState } from '../types/chat';
 import { consumeKnowledgeChatStream, createKnowledgeAgentState } from './knowledgeAgentStream';
 
+/** 把流式状态映射为消息的终态：completed / truncated（被截断）/ aborted（用户停止）/ failed。 */
+function toTerminalMessageStatus(status: KnowledgeAgentStreamState['status']): ChatMessage['status'] {
+  if (status === 'completed' || status === 'truncated' || status === 'aborted') return status;
+  return 'failed';
+}
+
 /** A retry reuses the persisted user turn and replaces its assistant draft. */
 export async function sendChatMessage(
   sessionId: string,
@@ -14,6 +20,8 @@ export async function sendChatMessage(
 ): Promise<void> {
   const text = content.trim();
   if (!text) return;
+  // 文档约定：单条 content 最长 10000 字符，前端先拦截，避免无谓请求。
+  if (text.length > 10000) throw new ApiError('问题最长 10000 个字符，请精简后再发送', 'INVALID_REQUEST');
   const session = chatActions.getSession(sessionId);
   if (!session) throw new Error('会话不存在');
 
@@ -55,7 +63,7 @@ export async function sendChatMessage(
     key: `private-chat:${assistantId}`,
     onCheckpoint: (snapshot, terminal) => update(assistantId, {
       content: snapshot.content, metadata: snapshot.metadata,
-      status: terminal ? state.status === 'completed' ? 'completed' : state.status === 'aborted' ? 'aborted' : 'failed' : 'generating',
+      status: terminal ? toTerminalMessageStatus(state.status) : 'generating',
     }),
   });
   const publish = (next: KnowledgeAgentStreamState, replaced = false) => {

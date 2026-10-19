@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 // import { useLocation, useNavigate } from 'react-router-dom';
-import { BACKEND_API_BASE_URL } from '../constants';
 import { useAuthStore } from '../store/useAuthStore';
+import { useLoginDialogStore } from '../store/useLoginDialogStore';
 
 export const useAuth = () => {
   const { setToken, fetchUserInfo, isAuthenticated, logout, user } =
@@ -30,8 +30,9 @@ export const useAuth = () => {
     }
   }, [isAuthenticated, user, fetchUserInfo]);
 
+  /** 打开登录弹窗（真正的 GitHub 授权在弹窗内的授权窗口中进行） */
   const login = () => {
-    window.location.href = `${BACKEND_API_BASE_URL}/github/auth/login`;
+    useLoginDialogStore.getState().setOpen(true);
   };
 
   return { isAuthenticated, user, login, logout };

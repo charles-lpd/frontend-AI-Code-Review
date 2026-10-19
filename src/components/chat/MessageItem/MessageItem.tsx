@@ -1,4 +1,3 @@
-import { Badge } from '@/ui/badge';
 import { Button } from '@/ui/button';
 import { MarkdownRenderer as MarkdownContent } from '@/components/markdown/MarkdownRenderer';
 import { useStreamDraft } from '@/hooks/useStreamDraft';
@@ -23,88 +22,6 @@ interface MessageItemProps {
   streamKey?: string;
   streaming?: boolean;
 }
-
-const ReviewStreamView = memo(function ReviewStreamView({
-  reviewStream,
-  fallback,
-}: {
-  reviewStream: NonNullable<ChatMessage['metadata']>['reviewStream'];
-  fallback: string;
-}) {
-  if (!reviewStream) {
-    return <MarkdownContent content={fallback} />;
-  }
-
-  const hasStructuredContent =
-    reviewStream.statusText ||
-    reviewStream.dimensions.length > 0 ||
-    reviewStream.summaryText ||
-    reviewStream.finalText;
-
-  if (!hasStructuredContent) {
-    return <MarkdownContent content={fallback} />;
-  }
-
-  return (
-    <div className="review-stream">
-      {reviewStream.statusText && (
-        <section className="review-stream__section">
-          <div className="review-stream__label">进度</div>
-          <MarkdownContent content={reviewStream.statusText} />
-        </section>
-      )}
-
-      {reviewStream.dimensions.map((dimension) => (
-        <section className="review-stream__section" key={dimension.name}>
-          <div className="review-stream__header">
-            <div className="review-stream__title">{dimension.name}</div>
-            <div className="review-stream__meta">
-              {typeof dimension.duration === 'number' && (
-                <Badge className="review-stream__badge">
-                  {(dimension.duration / 1000).toFixed(1)}s
-                </Badge>
-              )}
-              {dimension.loading && (
-                <Badge className="review-stream__badge review-stream__badge--loading">
-                  分析中
-                </Badge>
-              )}
-              {typeof dimension.ok === 'boolean' && (
-                <Badge
-                  className={`review-stream__badge ${dimension.ok ? 'review-stream__badge--ok' : 'review-stream__badge--warn'}`}
-                >
-                  {dimension.ok ? '完成' : '异常'}
-                </Badge>
-              )}
-            </div>
-          </div>
-          {dimension.loading && (
-            <div className="review-stream__loading">
-              <span className="review-stream__loading-dot"></span>
-              <span className="review-stream__loading-text">
-                正在流式生成...
-              </span>
-            </div>
-          )}
-          <MarkdownContent content={dimension.content || '处理中...'} />
-        </section>
-      ))}
-
-      {reviewStream.summaryText && (
-        <section className="review-stream__section">
-          <div className="review-stream__label">总结</div>
-          <MarkdownContent content={reviewStream.summaryText} />
-        </section>
-      )}
-
-      {reviewStream.finalText && (
-        <section className="review-stream__section review-stream__section--muted">
-          <MarkdownContent content={reviewStream.finalText} />
-        </section>
-      )}
-    </div>
-  );
-});
 
 const KnowledgeAgentView = memo(function KnowledgeAgentView({
   agent,
@@ -204,8 +121,8 @@ const MessageItem = memo(function MessageItem({
   const content = live?.content ?? savedContent;
   const metadata = live?.metadata ?? savedMetadata;
   const processedContent = content;
-  const reviewStream = metadata?.reviewStream;
   const knowledgeAgent = metadata?.knowledgeAgent;
+  const citations = knowledgeAgent?.citations?.length ? knowledgeAgent.citations : metadata?.citations ?? [];
   const icon = useMemo(() => {
     switch (role) {
       case 'user':
@@ -233,19 +150,14 @@ const MessageItem = memo(function MessageItem({
             <div className="message-item__tool-label">工具调用结果</div>
             <pre>{content}</pre>
           </div>
-        ) : role === 'assistant' && reviewStream?.kind === 'code_review' ? (
-          <ReviewStreamView
-            reviewStream={reviewStream}
-            fallback={processedContent}
-          />
         ) : (
           <MarkdownContent content={processedContent} streaming={live?.streaming ?? streaming} />
         )}
-        {role === 'assistant' && knowledgeAgent?.citations?.length ? (
+        {role === 'assistant' && citations.length ? (
           <div className="message-item__citations">
             <strong>参考资料</strong>
             <ol>
-              {knowledgeAgent.citations.map((citation) => (
+              {citations.map((citation) => (
                 <li key={citation.citationId}>
                   {citation.fileName} · 片段 {citation.chunkStart + 1}
                   {citation.chunkEnd !== citation.chunkStart ? `–${citation.chunkEnd + 1}` : ''}
@@ -253,6 +165,9 @@ const MessageItem = memo(function MessageItem({
               ))}
             </ol>
           </div>
+        ) : null}
+        {role === 'assistant' && (knowledgeAgent?.status === 'truncated' || metadata?.truncated) ? (
+          <div className="message-item__notice">回答因长度限制被截断</div>
         ) : null}
       </div>
     </div>

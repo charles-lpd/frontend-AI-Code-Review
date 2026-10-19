@@ -65,6 +65,14 @@ function normalizeSession(session: any): ChatSession {
     messages: (session.messages || []).map((message: any) => ({
       ...message,
       createdAt: message.createdAt ? new Date(message.createdAt).getTime() : undefined,
+      // 历史消息的引用在顶层 citations 字段，统一挂到 metadata 上，和实时流的渲染保持一致。
+      metadata: message.citations?.length || message.status === 'truncated'
+        ? {
+            ...message.metadata,
+            ...(message.citations?.length ? { citations: message.citations } : {}),
+            ...(message.status === 'truncated' ? { truncated: true } : {}),
+          }
+        : message.metadata,
     })),
     draft: session.draft || '',
     chatMode: session.chatMode ?? session.manageConfig?.chatMode ?? 'auto',

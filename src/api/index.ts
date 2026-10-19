@@ -7,6 +7,7 @@ import {
 } from '../constants';
 import { useAuthStore } from '../store/useAuthStore';
 import type { ApiErrorCode, PublicChatMessage, SessionKnowledgeFile } from '../types/chat';
+import { applyRefreshedToken, authFetch, handleUnauthorized } from './authFetch';
 
 export class ApiError extends Error {
   constructor(
@@ -22,18 +23,28 @@ export class ApiError extends Error {
   }
 }
 
+/** 限流时优先用 Retry-After 头（秒），否则回退到错误体里的 retryAfterMs。 */
+function resolveRetryAfterSeconds(headerValue: string | null | undefined, retryAfterMs: unknown): number | undefined {
+  if (headerValue !== null && headerValue !== undefined) {
+    const seconds = Number(headerValue);
+    if (Number.isFinite(seconds)) return seconds;
+  }
+  if (typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs)) {
+    return Math.ceil(retryAfterMs / 1000);
+  }
+  return undefined;
+}
+
 async function throwResponseError(response: Response): Promise<never> {
   const data = await response.json().catch(() => ({}));
   const detail = data?.error;
-  const retryAfterHeader = response.headers.get('Retry-After');
-  const retryAfter = retryAfterHeader === null ? undefined : Number(retryAfterHeader);
   throw new ApiError(
     detail?.message || (typeof detail === 'string' ? detail : `请求失败: ${response.status}`),
     detail?.code,
-    detail?.requestId,
+    detail?.requestId ?? response.headers.get('X-Request-Id') ?? undefined,
     detail?.retryable,
     response.status,
-    Number.isFinite(retryAfter) ? retryAfter : undefined,
+    resolveRetryAfterSeconds(response.headers.get('Retry-After'), detail?.retryAfterMs ?? data?.retryAfterMs),
   );
 }
 
@@ -64,13 +75,11 @@ export const sendChatStream = async (
   signal?: AbortSignal,
   clientMessageId?: string,
 ) => {
-  const token = useAuthStore.getState().token;
-  const response = await fetch(`${baseUrl}${CHAT_API_PATH}`, {
+  const response = await authFetch(`${baseUrl}${CHAT_API_PATH}`, {
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({
       sessionId,
@@ -127,30 +136,26 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    applyRefreshedToken(response.headers);
+    return response;
+  },
   (error) => {
+    applyRefreshedToken(error.response?.headers);
     const backendError = error.response?.data?.error;
     const errorMsg = backendError?.message || error.message || '未知系统错误';
 
     if (error.response?.status === 401) {
-      const { logout, isAuthenticated } = useAuthStore.getState();
-      if (isAuthenticated) {
-        logout();
-        if (window.location.pathname !== '/') {
-          window.location.href = '/';
-        }
-      }
+      handleUnauthorized(backendError?.code);
     }
 
     return Promise.reject(new ApiError(
       errorMsg,
       backendError?.code,
-      backendError?.requestId,
+      backendError?.requestId ?? error.response?.headers?.['x-request-id'],
       backendError?.retryable,
       error.response?.status,
-      Number.isFinite(Number(error.response?.headers?.['retry-after']))
-        ? Number(error.response?.headers?.['retry-after'])
-        : undefined,
+      resolveRetryAfterSeconds(error.response?.headers?.['retry-after'] ?? null, backendError?.retryAfterMs),
     ));
   },
 );
@@ -236,15 +241,13 @@ export const uploadSessionKnowledge = async (
   sessionId: string,
   files: File[],
 ): Promise<{ knowledgeFiles: SessionKnowledgeFile[]; knowledgeReadiness?: import('../types/chat').KnowledgeReadiness }> => {
-  const token = useAuthStore.getState().token;
   const formData = new FormData();
   files.forEach((file) => {
     formData.append('files', file);
   });
 
-  const response = await fetch(`${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge`, {
+  const response = await authFetch(`${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
   });
 
@@ -259,13 +262,9 @@ export const getKnowledgeContent = async (
   sessionId: string,
   fileId: string,
 ): Promise<KnowledgePreviewResult> => {
-  const token = useAuthStore.getState().token;
-  const response = await fetch(
+  const response = await authFetch(
     `${baseUrl}${SESSIONS_API_PREFIX}/${sessionId}/knowledge/${fileId}/content`,
-    {
-      method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    },
+    { method: 'GET' },
   );
 
   if (!response.ok) {

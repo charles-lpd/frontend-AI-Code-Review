@@ -31,15 +31,19 @@ export type AgentStatusEvent = {
   message?: string;
   seq?: number;
   timestamp?: string;
+  /** agent_finished 时由后端给出：因长度被截断、结束原因、是否为回放 */
+  truncated?: boolean;
+  finishReason?: string | null;
+  replayed?: boolean;
 };
 
 export type ChatSsePayload =
   | { type: 'text'; text: string; replayed?: boolean; messageId?: string; seq?: number; timestamp?: string }
-  | { type: 'message_meta'; userMessageId: string; assistantMessageId: string; clientMessageId?: string }
+  | { type: 'message_meta'; userMessageId: string; assistantMessageId: string; clientMessageId?: string; runId?: string }
   | { type: 'citation'; citation: Citation; seq?: number; timestamp?: string }
   | AgentStatusEvent
   | { warning: string; text: string }
-  | { error: string; code?: ApiErrorCode; requestId?: string };
+  | { error: string; code?: ApiErrorCode; requestId?: string; retryable?: boolean };
 
 interface ConsumeOptions {
   signal?: AbortSignal;
@@ -104,6 +108,15 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
       return state;
     }
 
+    if (event.event === 'agent_finished') {
+      if (event.citations?.length) mergeCitations(event.citations);
+      publish({
+        status: event.truncated ? 'truncated' : 'completed',
+        finishReason: event.finishReason ?? state.finishReason,
+      });
+      return state;
+    }
+
     if (event.citations?.length) mergeCitations(event.citations);
 
     // tool_finished may omit labels already supplied by tool_started.
@@ -150,14 +163,15 @@ export async function consumeKnowledgeChatStream(response: Response, options: Co
   try {
     for await (const frame of readSseFrames(response, options.signal)) {
       if (frame.data.trim() === '[DONE]') {
-        state = { ...state, status: 'completed' };
+        // agent_finished 可能已经给出 truncated；[DONE] 只负责收尾，不能把截断覆盖成 completed。
+        state = { ...state, status: state.status === 'truncated' ? 'truncated' : 'completed' };
         options.onState(state);
         completed = true;
         break;
       }
       let event: ChatSsePayload;
       try { event = JSON.parse(frame.data); }
-      catch { throw new ApiError('流式响应格式错误', 'LLM_UNAVAILABLE'); }
+      catch { throw new ApiError('流式响应格式错误', 'LLM_STREAM_INCOMPLETE', undefined, true); }
       const seq = 'seq' in event ? event.seq : undefined;
       if (typeof seq === 'number') {
         if (seenSeq.has(seq)) continue;
@@ -167,12 +181,16 @@ export async function consumeKnowledgeChatStream(response: Response, options: Co
       if ('type' in event && event.type === 'message_meta') { options.onMessageMeta?.(event); continue; }
       state = reduceChatEvent(state, event);
       options.onState(state, 'type' in event && event.type === 'text' && event.replayed === true);
-      if ('error' in event) throw new ApiError(event.error, event.code, event.requestId);
+      if ('error' in event) throw new ApiError(event.error, event.code, event.requestId, event.retryable ?? false);
       if ('type' in event && event.type === 'agent_status' && event.event === 'error') {
         throw new ApiError(event.message || '回答生成失败', event.code, event.requestId);
       }
+      // agent_finished 表示回答已结束；仍等待 [DONE] 或连接关闭。
+      if ('type' in event && event.type === 'agent_status' && event.event === 'agent_finished') {
+        completed = true;
+      }
     }
-    if (!completed) throw new ApiError('连接提前结束，请重试', 'LLM_UNAVAILABLE');
+    if (!completed) throw new ApiError('连接提前结束，回答不完整，请重试', 'LLM_STREAM_INCOMPLETE', undefined, true);
   } catch (error) {
     if (options.signal?.aborted) {
       options.onState({ ...state, status: 'aborted' });

@@ -1,0 +1,32 @@
+.login-dialog {
+  max-width: 420px;
+}
+
+.login-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.login-dialog__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(var(--muted-foreground));
+  font-size: 14px;
+}
+
+.login-dialog__error {
+  margin: 0;
+  color: hsl(var(--destructive));
+  font-size: 13px;
+}
+
+.login-dialog__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
