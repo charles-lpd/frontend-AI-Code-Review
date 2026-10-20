@@ -86,6 +86,7 @@ export function useChatSend(sessionId: string | undefined) {
         const message = err instanceof ApiError
           ? ({
               CHAT_IN_PROGRESS: '当前会话已有回答正在生成，请等待完成或停止原请求后重试',
+              CHAT_TIMEOUT: '本次回答耗时过长已被中止，请重试',
               LLM_STREAM_INCOMPLETE: '回答不完整（连接中断），请重试',
               GITHUB_UNAVAILABLE: 'GitHub 连接超时，请稍后重试',
               IDEMPOTENCY_CONFLICT: '重试标识对应的问题已改变，请作为新问题发送',

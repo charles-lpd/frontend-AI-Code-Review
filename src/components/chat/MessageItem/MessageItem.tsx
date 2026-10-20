@@ -32,7 +32,7 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
   const steps = useMemo(
     () =>
       Object.values(agent?.steps ?? {}).sort(
-        (left, right) => (left.stepIndex ?? left.seq ?? 0) - (right.stepIndex ?? right.seq ?? 0),
+        (left, right) => (left.seq ?? 0) - (right.seq ?? 0),
       ),
     [agent?.steps],
   );
@@ -79,7 +79,7 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
           {steps.map((step) => (
             <div
               className={`knowledge-agent__step knowledge-agent__step--${step.stepStatus}`}
-              key={step.stepKey}
+              key={step.id}
             >
               <span className="knowledge-agent__step-icon">
                 {step.stepStatus === 'running' ? (
@@ -90,7 +90,9 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                   <XCircle size={14} />
                 )}
               </span>
-              <span className="knowledge-agent__step-label">{step.stepLabel}</span>
+              <span className="knowledge-agent__step-label">
+                {step.detail ? `${step.stepLabel}：${step.detail}` : step.stepLabel}
+              </span>
               {step.stepStatus === 'completed' &&
                 typeof step.durationMs === 'number' && (
                 <span className="knowledge-agent__duration">

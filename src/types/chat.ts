@@ -9,7 +9,7 @@ export type ApiErrorCode =
   | 'EMBEDDING_UNAVAILABLE' | 'EMBEDDING_DIMENSION_MISMATCH' | 'LLM_UNAVAILABLE'
   | 'LLM_TIMEOUT' | 'TOOL_FAILED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'
   | 'CHAT_IN_PROGRESS' | 'IDEMPOTENCY_CONFLICT' | 'CHAT_RETRY_CONFLICT'
-  | 'LLM_STREAM_INCOMPLETE' | 'GITHUB_UNAVAILABLE' | 'OAUTH_STATE_INVALID'
+  | 'LLM_STREAM_INCOMPLETE' | 'GITHUB_UNAVAILABLE' | 'OAUTH_STATE_INVALID' | 'CHAT_TIMEOUT'
   | 'GITHUB_AUTH_EXPIRED' | 'GITHUB_AUTH_FAILED';
 
 export interface Citation {
@@ -87,7 +87,12 @@ export type KnowledgeAgentStepStatus =
   | 'failed';
 
 export interface KnowledgeAgentStep {
+  /** 步骤唯一 ID：工具调用为 callId，其余为 stepKey（同名步骤可能多次出现） */
+  id: string;
   stepKey: string;
+  callId?: string;
+  /** 参数摘要，例如搜索词、城市名（最长 80 字符） */
+  detail?: string;
   stepLabel: string;
   stepStatus: KnowledgeAgentStepStatus;
   stepIndex: number;

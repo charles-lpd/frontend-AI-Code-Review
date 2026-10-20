@@ -19,6 +19,10 @@ export type AgentStatusEvent = {
     | 'tool_finished'
     | 'error';
   stepKey: string;
+  /** 工具调用的开始/结束事件配对用（同名工具会出现多次） */
+  callId?: string;
+  /** 参数摘要（工具调用） */
+  detail?: string;
   stepLabel: string;
   stepStatus: 'running' | 'completed' | 'failed';
   stepIndex: number;
@@ -61,7 +65,28 @@ export function createKnowledgeAgentState(): KnowledgeAgentStreamState {
   };
 }
 
-/** Pure business reduction; request-level sequence deduplication belongs to the consumer. */
+/** 没有后端给出 stepLabel 时使用的兜底文案 */
+const DEFAULT_STEP_LABELS: Record<string, string> = {
+  agent: '智能助手',
+  retrieval: '检索知识库',
+  analysis: '分析问题',
+  generation: '生成回答',
+};
+
+/** 步骤唯一 ID：工具调用用 callId（同名工具会多次出现），其余用 stepKey。 */
+function stepIdOf(event: { callId?: string; stepKey?: string }) {
+  return event.callId ?? event.stepKey ?? 'unknown';
+}
+
+/** 把所有仍在进行中的步骤标记为失败（出错或中断时使用）。 */
+function failRunningSteps(steps: Record<string, KnowledgeAgentStep>): Record<string, KnowledgeAgentStep> {
+  const next: Record<string, KnowledgeAgentStep> = {};
+  for (const [id, step] of Object.entries(steps)) {
+    next[id] = step.stepStatus === 'running' ? { ...step, stepStatus: 'failed' } : step;
+  }
+  return next;
+}
+
 export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatSsePayload): KnowledgeAgentStreamState {
   let state = current;
   const publish = (patch: Partial<KnowledgeAgentStreamState>) => { state = { ...state, ...patch }; };
@@ -80,6 +105,7 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
         error: event.error,
         errorCode: event.code,
         requestId: event.requestId,
+        steps: failRunningSteps(state.steps),
       });
       return state;
     }
@@ -110,15 +136,17 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
 
     if (event.event === 'agent_finished') {
       if (event.citations?.length) mergeCitations(event.citations);
-      // 回答结束：把仍在 running 的步骤全部标记为完成，并更新 agent 自身这一步的结束状态与文案
+      // 回答结束：仍在进行中的步骤全部视为完成，并更新 agent 自身这一步
       const steps: Record<string, KnowledgeAgentStep> = {};
-      for (const [key, step] of Object.entries(state.steps)) {
-        steps[key] = step.stepStatus === 'running' ? { ...step, stepStatus: 'completed' } : step;
+      for (const [id, step] of Object.entries(state.steps)) {
+        steps[id] = step.stepStatus === 'running' ? { ...step, stepStatus: 'completed' } : step;
       }
-      const previous = state.steps[event.stepKey];
-      steps[event.stepKey] = {
+      const id = stepIdOf(event);
+      const previous = state.steps[id];
+      steps[id] = {
+        id,
         stepKey: event.stepKey,
-        stepLabel: event.stepLabel || previous?.stepLabel || event.stepKey,
+        stepLabel: event.stepLabel || previous?.stepLabel || DEFAULT_STEP_LABELS[event.stepKey] || event.stepKey,
         stepStatus: 'completed',
         stepIndex: event.stepIndex ?? previous?.stepIndex ?? 0,
         stepTotal: event.stepTotal ?? previous?.stepTotal ?? 0,
@@ -135,39 +163,51 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
       return state;
     }
 
+    // 错误事件是 agent_status(error)：只含 code/message，没有 stepKey，不能当成一个步骤
+    if (event.event === 'error') {
+      publish({
+        steps: failRunningSteps(state.steps),
+        status: 'failed',
+        error: event.message || '回答生成失败',
+        errorCode: event.code ?? state.errorCode,
+        requestId: event.requestId ?? state.requestId,
+      });
+      return state;
+    }
+
     if (event.citations?.length) mergeCitations(event.citations);
 
-    // tool_finished may omit labels already supplied by tool_started.
-    const previous = state.steps[event.stepKey];
+    // 同名步骤（多次工具调用）以 callId 区分；tool_finished 可能省略 stepLabel，沿用 started 的值
+    const id = stepIdOf(event);
+    const previous = state.steps[id];
     const step: KnowledgeAgentStep = {
+      id,
       stepKey: event.stepKey,
-      stepLabel: event.stepLabel || previous?.stepLabel || event.stepKey,
-      // *_started 事件若未携带 stepStatus，按进行中处理，避免步骤没有运行态
+      callId: event.callId ?? previous?.callId,
+      detail: event.detail ?? previous?.detail,
+      stepLabel: event.stepLabel || previous?.stepLabel || DEFAULT_STEP_LABELS[event.stepKey] || event.stepKey,
+      // *_started 若未携带 stepStatus，按进行中处理，避免步骤没有运行态
       stepStatus: event.stepStatus ?? (event.event.endsWith('_started') ? 'running' : 'completed'),
       stepIndex: event.stepIndex ?? previous?.stepIndex ?? 0,
       stepTotal: event.stepTotal ?? previous?.stepTotal ?? 0,
       seq: event.seq,
       timestamp: event.timestamp,
-      durationMs: event.durationMs,
-      message: event.message,
+      durationMs: event.durationMs ?? previous?.durationMs,
+      message: event.message ?? previous?.message,
     };
     const streamStatus =
-      event.event === 'error' || event.stepStatus === 'failed'
+      event.stepStatus === 'failed'
         ? 'failed'
         : event.event === 'tool_started'
           ? 'retrieving'
           : 'generating';
 
     publish({
-      steps: { ...state.steps, [event.stepKey]: step },
+      steps: { ...state.steps, [id]: step },
       status: streamStatus,
       executionMode: event.mode ?? state.executionMode,
       requestId: event.requestId ?? state.requestId,
       errorCode: event.code ?? state.errorCode,
-      error:
-        event.event === 'error'
-          ? event.message || '回答生成失败'
-          : state.error,
     });
 
 
