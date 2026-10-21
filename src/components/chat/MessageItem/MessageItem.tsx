@@ -100,7 +100,11 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                 )}
               </span>
               <span className="knowledge-agent__step-label">
-                {step.detail ? `${step.stepLabel}：${step.detail}` : step.stepLabel}
+                {step.stepStatus === 'running'
+                  ? `正在${step.detail ? `${step.stepLabel} ${step.detail}` : step.stepLabel}`
+                  : step.detail
+                    ? `${step.stepLabel}：${step.detail}`
+                    : step.stepLabel}
               </span>
               {step.stepStatus === 'completed' &&
                 typeof step.durationMs === 'number' && (

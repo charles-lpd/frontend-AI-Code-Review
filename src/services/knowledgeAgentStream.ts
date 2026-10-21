@@ -65,12 +65,19 @@ export function createKnowledgeAgentState(): KnowledgeAgentStreamState {
   };
 }
 
-/** 没有后端给出 stepLabel 时使用的兜底文案 */
+/** 没有后端给出 stepLabel 时使用的兜底文案（工具映射见对接文档 4.5） */
 const DEFAULT_STEP_LABELS: Record<string, string> = {
   agent: '智能助手',
   retrieval: '检索知识库',
   analysis: '分析问题',
   generation: '生成回答',
+  'tool:github_list_repos': '获取仓库列表',
+  'tool:github_list_files': '浏览仓库目录',
+  'tool:github_read_file': '读取仓库文件',
+  'tool:github_search_code': '搜索仓库代码',
+  'tool:github_get_commits': '查看提交记录',
+  'tool:get_weather': '查询天气',
+  'tool:search_web': '搜索互联网',
 };
 
 /** 步骤唯一 ID：工具调用用 callId（同名工具会多次出现），其余用 stepKey。 */
