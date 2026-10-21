@@ -10,7 +10,8 @@ export type ApiErrorCode =
   | 'LLM_TIMEOUT' | 'TOOL_FAILED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'
   | 'CHAT_IN_PROGRESS' | 'IDEMPOTENCY_CONFLICT' | 'CHAT_RETRY_CONFLICT'
   | 'LLM_STREAM_INCOMPLETE' | 'GITHUB_UNAVAILABLE' | 'OAUTH_STATE_INVALID' | 'CHAT_TIMEOUT'
-  | 'GITHUB_AUTH_EXPIRED' | 'GITHUB_AUTH_FAILED';
+  | 'GITHUB_AUTH_EXPIRED' | 'GITHUB_AUTH_FAILED'
+  | 'GITHUB_REPO_NOT_ACCESSIBLE' | 'GITHUB_FORBIDDEN' | 'GITHUB_NOT_FOUND' | 'GITHUB_RATE_LIMITED';
 
 export interface Citation {
   citationId: string;
@@ -101,6 +102,8 @@ export interface KnowledgeAgentStep {
   timestamp?: string;
   durationMs?: number;
   message?: string;
+  /** 步骤失败时的错误码（工具调用失败，例如 GitHub 仓库无权限、限流等） */
+  code?: ApiErrorCode;
 }
 
 export interface KnowledgeAgentStreamState {

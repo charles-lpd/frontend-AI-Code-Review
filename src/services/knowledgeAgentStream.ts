@@ -194,6 +194,7 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
       timestamp: event.timestamp,
       durationMs: event.durationMs ?? previous?.durationMs,
       message: event.message ?? previous?.message,
+      code: event.stepStatus === 'failed' ? event.code ?? previous?.code : previous?.code,
     };
     const streamStatus =
       event.stepStatus === 'failed'

@@ -12,8 +12,17 @@ import {
   XCircle,
 } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
-import type { ChatMessage, ChatRole } from '../../../types/chat';
+import type { ChatMessage, ChatRole, ApiErrorCode } from '../../../types/chat';
 import './MessageItem.css';
+
+/** 工具步骤失败且后端只给了错误码时的兜底文案 */
+const STEP_FAIL_CODE_TEXT: Partial<Record<ApiErrorCode, string>> = {
+  GITHUB_REPO_NOT_ACCESSIBLE: '当前账号没有该仓库的权限',
+  GITHUB_FORBIDDEN: 'GitHub 拒绝访问该仓库',
+  GITHUB_NOT_FOUND: '仓库或文件不存在',
+  GITHUB_RATE_LIMITED: 'GitHub 接口限流',
+  GITHUB_UNAVAILABLE: 'GitHub 连接超时',
+};
 
 interface MessageItemProps {
   role: ChatRole;
@@ -101,6 +110,11 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                     : `${(step.durationMs / 1000).toFixed(1)}s`}
                 </span>
                 )}
+              {step.stepStatus === 'failed' && (step.message || step.code) && (
+                <span className="knowledge-agent__step-fail-reason">
+                  {step.message || (step.code ? STEP_FAIL_CODE_TEXT[step.code] : undefined)}
+                </span>
+              )}
             </div>
           ))}
           {agent.error && (
