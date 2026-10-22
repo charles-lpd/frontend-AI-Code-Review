@@ -67,7 +67,7 @@ function getDefaultManageConfig() {
   return {
     isPublic: false,
     systemPrompt: '',
-    chatMode: 'auto' as const,
+    chatMode: 'assistant' as const,
     knowledgeReadiness: 'empty' as const,
     knowledgeFiles: [],
   };

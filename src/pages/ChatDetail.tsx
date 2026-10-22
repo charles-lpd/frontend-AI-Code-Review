@@ -129,7 +129,7 @@ export default function ChatDetail() {
   const [titleDraft, setTitleDraft] = useState('');
   const [promptDraft, setPromptDraft] = useState('');
   const [isPublicDraft, setIsPublicDraft] = useState(false);
-  const [chatModeDraft, setChatModeDraft] = useState<ChatMode>('auto');
+  const [chatModeDraft, setChatModeDraft] = useState<ChatMode>('assistant');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [refreshingKnowledge, setRefreshingKnowledge] = useState(false);
@@ -182,7 +182,7 @@ export default function ChatDetail() {
     setTitleDraft(session?.title ?? '');
     setPromptDraft(session?.manageConfig?.systemPrompt ?? '');
     setIsPublicDraft(session?.manageConfig?.isPublic ?? false);
-    setChatModeDraft(session?.manageConfig?.chatMode ?? 'auto');
+    setChatModeDraft(session?.manageConfig?.chatMode ?? 'assistant');
   }, [
     session?.id,
     session?.title,
@@ -510,7 +510,7 @@ export default function ChatDetail() {
             <Select value={chatModeDraft} disabled={saving || uploading} onValueChange={(value) => setChatModeDraft(value as ChatMode)}>
               <SelectTrigger id="session-mode" aria-label="问答模式"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">自动：知识库可用时优先检索</SelectItem>
+                <SelectItem value="auto">自动：有知识库文件时走知识库，否则走高级助手</SelectItem>
                 <SelectItem value="direct">普通问答：不检索知识库</SelectItem>
                 <SelectItem value="knowledge">知识库：固定检索当前会话文件</SelectItem>
                 <SelectItem value="assistant">高级助手：仅私有问答可使用</SelectItem>
