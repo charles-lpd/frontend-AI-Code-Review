@@ -43,7 +43,7 @@ function normalizeManageConfig(session: any): SessionManageConfig {
     isPublic: session.manageConfig?.isPublic ?? session.isPublic ?? false,
     systemPrompt:
       session.manageConfig?.systemPrompt ?? session.systemPrompt ?? '',
-    chatMode: session.manageConfig?.chatMode ?? session.chatMode ?? 'auto',
+    chatMode: session.manageConfig?.chatMode ?? session.chatMode ?? 'assistant',
     knowledgeReadiness:
       session.manageConfig?.knowledgeReadiness ??
       session.knowledgeReadiness ??
@@ -75,7 +75,7 @@ function normalizeSession(session: any): ChatSession {
         : message.metadata,
     })),
     draft: session.draft || '',
-    chatMode: session.chatMode ?? session.manageConfig?.chatMode ?? 'auto',
+    chatMode: session.chatMode ?? session.manageConfig?.chatMode ?? 'assistant',
     manageConfig: normalizeManageConfig(session),
   } as ChatSession;
 }
@@ -85,7 +85,7 @@ function normalizePublicSession(session: any): PublicSessionInfo {
     id: session.id,
     title: session.title,
     isPublic: session.isPublic ?? session.manageConfig?.isPublic ?? false,
-    chatMode: session.chatMode ?? session.manageConfig?.chatMode ?? 'auto',
+    chatMode: session.chatMode ?? session.manageConfig?.chatMode ?? 'assistant',
     createdAt: session.createdAt
       ? new Date(session.createdAt).getTime()
       : Date.now(),

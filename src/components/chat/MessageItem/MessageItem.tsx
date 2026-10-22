@@ -12,8 +12,17 @@ import {
   XCircle,
 } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
-import type { ChatMessage, ChatRole } from '../../../types/chat';
+import type { ChatMessage, ChatRole, ApiErrorCode, KnowledgeAgentStep } from '../../../types/chat';
 import './MessageItem.css';
+
+/** 工具步骤失败且后端只给了错误码时的兜底文案 */
+const STEP_FAIL_CODE_TEXT: Partial<Record<ApiErrorCode, string>> = {
+  GITHUB_REPO_NOT_ACCESSIBLE: '当前账号没有该仓库的权限',
+  GITHUB_FORBIDDEN: 'GitHub 拒绝访问该仓库',
+  GITHUB_NOT_FOUND: '仓库或文件不存在',
+  GITHUB_RATE_LIMITED: 'GitHub 接口限流',
+  GITHUB_UNAVAILABLE: 'GitHub 连接超时',
+};
 
 interface MessageItemProps {
   role: ChatRole;
@@ -22,6 +31,56 @@ interface MessageItemProps {
   streamKey?: string;
   streaming?: boolean;
 }
+
+/** 文档 4.5：这些工具的 detail 形如 repo:path，可拼成 GitHub 链接 */
+const GITHUB_PATH_TOOL_KEYS = new Set([
+  'tool:github_list_files',
+  'tool:github_read_file',
+  'tool:github_search_code',
+  'tool:github_get_commits',
+]);
+
+/** 把 repo:path 形式的 detail 转成 GitHub 链接；无法可靠解析时返回 null（detail 可能被截断成 "…"） */
+function githubDetailUrl(stepKey: string, detail?: string): string | null {
+  if (!detail || !GITHUB_PATH_TOOL_KEYS.has(stepKey) || detail.endsWith('…')) return null;
+  const separator = detail.indexOf(':');
+  if (separator <= 0 || separator === detail.length - 1) return null;
+  const repo = detail.slice(0, separator);
+  const path = detail.slice(separator + 1);
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return null;
+  return `https://github.com/${repo}/blob/main/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+/** 工具步骤的进度展示 */
+const KnowledgeAgentStepLabel = memo(function KnowledgeAgentStepLabel({
+  step,
+}: {
+  step: KnowledgeAgentStep;
+}) {
+  const url = githubDetailUrl(step.stepKey, step.detail);
+  if (step.stepStatus === 'running') {
+    return (
+      <span className="knowledge-agent__step-label">
+        正在{step.detail ? `${step.stepLabel} ${step.detail}` : step.stepLabel}
+      </span>
+    );
+  }
+  if (!step.detail) {
+    return <span className="knowledge-agent__step-label">{step.stepLabel}</span>;
+  }
+  return (
+    <span className="knowledge-agent__step-label">
+      {step.stepLabel}：
+      {url ? (
+        <a href={url} target="_blank" rel="noopener noreferrer" className="knowledge-agent__step-link">
+          {step.detail}
+        </a>
+      ) : (
+        step.detail
+      )}
+    </span>
+  );
+});
 
 const KnowledgeAgentView = memo(function KnowledgeAgentView({
   agent,
@@ -90,9 +149,7 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                   <XCircle size={14} />
                 )}
               </span>
-              <span className="knowledge-agent__step-label">
-                {step.detail ? `${step.stepLabel}：${step.detail}` : step.stepLabel}
-              </span>
+              <KnowledgeAgentStepLabel step={step} />
               {step.stepStatus === 'completed' &&
                 typeof step.durationMs === 'number' && (
                 <span className="knowledge-agent__duration">
@@ -101,6 +158,11 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                     : `${(step.durationMs / 1000).toFixed(1)}s`}
                 </span>
                 )}
+              {step.stepStatus === 'failed' && (step.message || step.code) && (
+                <span className="knowledge-agent__step-fail-reason">
+                  {step.message || (step.code ? STEP_FAIL_CODE_TEXT[step.code] : undefined)}
+                </span>
+              )}
             </div>
           ))}
           {agent.error && (

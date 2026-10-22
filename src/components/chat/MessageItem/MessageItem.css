@@ -235,9 +235,21 @@
   overflow-wrap: anywhere;
 }
 
+.knowledge-agent__step-link {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .knowledge-agent__duration {
   color: hsl(var(--primary));
   font-variant-numeric: tabular-nums;
+}
+
+.knowledge-agent__step-fail-reason {
+  color: hsl(var(--destructive));
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }
 
 .knowledge-agent__error {
