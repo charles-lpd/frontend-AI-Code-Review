@@ -154,22 +154,6 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                 )}
               </span>
               <KnowledgeAgentStepLabel step={step} />
-              {step.items && step.items.length > 0 && (
-                <ul className="knowledge-agent__search-items">
-                  {step.items.map((item) => {
-                    const href = safeHttpUrl(item.url);
-                    return (
-                      <li key={`${item.url}-${item.title}`}>
-                        {href ? (
-                          <a href={href} target="_blank" rel="noopener noreferrer">{item.title}</a>
-                        ) : (
-                          <span>{item.title}</span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
               {step.stepStatus === 'completed' &&
                 typeof step.durationMs === 'number' && (
                 <span className="knowledge-agent__duration">
