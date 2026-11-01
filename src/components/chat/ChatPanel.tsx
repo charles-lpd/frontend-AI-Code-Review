@@ -39,7 +39,6 @@ interface ChatMessagesProps {
   listRef: React.RefObject<HTMLDivElement | null>;
   onScroll: () => void;
   isLoadingMore: boolean;
-  summary?: string;
   messagesHistory: ChatMessageView[];
   isLoading: boolean;
   hasStreamingContent: boolean;
@@ -49,7 +48,6 @@ const ChatMessages = memo(function ChatMessages({
   listRef,
   onScroll,
   isLoadingMore,
-  summary,
   messagesHistory,
   isLoading,
   hasStreamingContent,
@@ -61,14 +59,6 @@ const ChatMessages = memo(function ChatMessages({
           <div className="chat__history-loading">
             <Spinner />
             <span>加载历史记录...</span>
-          </div>
-        </div>
-      )}
-      {summary && (
-        <div className="message-container">
-          <div className="chat__summary">
-            <div className="chat__summary-title">会话摘要</div>
-            <div className="chat__summary-content">{summary}</div>
           </div>
         </div>
       )}
@@ -192,15 +182,9 @@ const ChatPanel = memo(function ChatPanel({
     scrollToLatest();
     const text = inputValue.trim();
     if (!text || isLoading || isCreatingSession) return;
-    if (session?.manageConfig?.chatMode === 'knowledge') {
-      if (session.manageConfig.knowledgeReadiness === 'indexing') {
-        message.warning('知识库正在建立索引，请稍后再试');
-        return;
-      }
-      if (session.manageConfig.knowledgeReadiness === 'failed') {
-        message.error('知识库索引失败，请在会话设置中重新索引');
-        return;
-      }
+    if (session?.manageConfig?.knowledgeReadiness === 'indexing') {
+      message.warning('知识库正在建立索引，请稍后再试');
+      return;
     }
 
     let targetSessionId = sessionId;
@@ -224,7 +208,6 @@ const ChatPanel = memo(function ChatPanel({
     isCreatingSession,
     isLoading,
     send,
-    session?.manageConfig?.chatMode,
     session?.manageConfig?.knowledgeReadiness,
     sessionId,
   ]);
@@ -305,7 +288,6 @@ const ChatPanel = memo(function ChatPanel({
         listRef={listRef}
         onScroll={handleScroll}
         isLoadingMore={Boolean(session?.isLoadingMore)}
-        summary={session?.summary ?? undefined}
         messagesHistory={messagesHistory}
         isLoading={isLoading}
         hasStreamingContent={Boolean(
@@ -329,11 +311,19 @@ const ChatPanel = memo(function ChatPanel({
         </WorkspaceError>
       )}
 
-      {session?.manageConfig?.knowledgeReadiness === 'mixed' &&
-        (session.manageConfig.chatMode === 'auto' ||
-          session.manageConfig.chatMode === 'knowledge') && (
+      {session?.manageConfig?.knowledgeReadiness === 'mixed' && (
           <div className="chat__knowledge-notice" role="status">
             部分知识文件仍在处理或索引失败，本次问答仅使用已就绪文件。
+          </div>
+        )}
+      {session?.manageConfig?.knowledgeReadiness === 'indexing' && (
+          <div className="chat__knowledge-notice" role="status">
+            知识库正在建立索引，本次回答暂不基于你的文档。
+          </div>
+        )}
+      {session?.manageConfig?.knowledgeReadiness === 'failed' && (
+          <div className="chat__knowledge-notice" role="status">
+            知识库索引失败，本次回答不基于你的文档。请到会话设置中重新索引。
           </div>
         )}
 

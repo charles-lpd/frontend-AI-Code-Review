@@ -67,7 +67,6 @@ function getDefaultManageConfig() {
   return {
     isPublic: false,
     systemPrompt: '',
-    chatMode: 'assistant' as const,
     knowledgeReadiness: 'empty' as const,
     knowledgeFiles: [],
   };
@@ -132,6 +131,8 @@ export const useChatStore = create<ChatStore>()(
           return;
         }
 
+        // 完整加载进行中时，不重复发起请求（StrictMode 或多处同时调用）
+        if (get().isLoading) return;
         set({ isLoading: true, error: null });
         try {
           const rawSessions = await sessionApi.list();
@@ -324,7 +325,6 @@ export const useChatStore = create<ChatStore>()(
             typeof patch.systemPrompt === 'string'
               ? patch.systemPrompt
               : undefined,
-          chatMode: patch.chatMode,
         });
         set((state) => ({
           sessions: state.sessions.map((s) =>

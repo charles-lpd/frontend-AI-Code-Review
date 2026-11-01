@@ -2,10 +2,11 @@ import { ApiError } from '../api';
 import { readSseFrames } from './streamTransport';
 import type {
   ApiErrorCode,
-  ChatMode,
   Citation,
   KnowledgeAgentStep,
   KnowledgeAgentStreamState,
+  MemoryNotice,
+  SearchResultItem,
 } from '../types/chat';
 
 export type AgentStatusEvent = {
@@ -13,10 +14,10 @@ export type AgentStatusEvent = {
   event:
     | 'agent_started'
     | 'agent_finished'
-    | 'model_started'
-    | 'model_finished'
     | 'tool_started'
     | 'tool_finished'
+    | 'memory_saved'
+    | 'memory_rejected'
     | 'error';
   stepKey: string;
   /** 工具调用的开始/结束事件配对用（同名工具会出现多次） */
@@ -28,7 +29,6 @@ export type AgentStatusEvent = {
   stepIndex: number;
   stepTotal: number;
   requestId?: string;
-  mode?: ChatMode;
   durationMs?: number;
   citations?: Citation[];
   code?: ApiErrorCode;
@@ -39,6 +39,12 @@ export type AgentStatusEvent = {
   truncated?: boolean;
   finishReason?: string | null;
   replayed?: boolean;
+  /** memory_saved 时的记忆内容 */
+  memory?: { id: string; text: string };
+  /** tool_finished（search_web）时的搜索结果摘要 */
+  items?: SearchResultItem[];
+  /** GitHub 工具的实际链接（后端按实际 ref 生成） */
+  url?: string;
 };
 
 export type ChatSsePayload =
@@ -62,10 +68,11 @@ export function createKnowledgeAgentState(): KnowledgeAgentStreamState {
     steps: {},
     status: 'connecting',
     citations: [],
+    memories: [],
   };
 }
 
-/** 没有后端给出 stepLabel 时使用的兜底文案（工具映射见对接文档 4.5） */
+/** 没有后端给出 stepLabel 时使用的兜底文案（工具映射见对接文档 3.3 节） */
 const DEFAULT_STEP_LABELS: Record<string, string> = {
   agent: '智能助手',
   retrieval: '检索知识库',
@@ -126,7 +133,7 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
       publish({
         answer: event.replayed ? event.text : state.answer + event.text,
         status: 'generating',
-        ...(event.replayed ? { citations: [], steps: {} } : {}),
+        ...(event.replayed ? { citations: [], steps: {}, memories: [] } : {}),
       });
       return state;
     }
@@ -138,6 +145,16 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
 
     if (event.type === 'citation') {
       mergeCitations([event.citation]);
+      return state;
+    }
+
+    if (event.event === 'memory_saved' || event.event === 'memory_rejected') {
+      // 记忆通知不是工具步骤：不进入 steps，不改变 status，按 seq 独立排列
+      const key = event.seq ?? state.memories.length;
+      const notice: MemoryNotice = event.event === 'memory_saved' && event.memory
+        ? { key, kind: 'saved', memoryId: event.memory.id, text: event.memory.text }
+        : { key, kind: 'rejected', code: event.code, message: event.message };
+      publish({ memories: [...state.memories, notice] });
       return state;
     }
 
@@ -201,6 +218,8 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
       timestamp: event.timestamp,
       durationMs: event.durationMs ?? previous?.durationMs,
       message: event.message ?? previous?.message,
+      items: event.items ?? previous?.items,
+      url: event.url ?? previous?.url,
       code: event.stepStatus === 'failed' ? event.code ?? previous?.code : previous?.code,
     };
     const streamStatus =
@@ -213,7 +232,6 @@ export function reduceChatEvent(current: KnowledgeAgentStreamState, event: ChatS
     publish({
       steps: { ...state.steps, [id]: step },
       status: streamStatus,
-      executionMode: event.mode ?? state.executionMode,
       requestId: event.requestId ?? state.requestId,
       errorCode: event.code ?? state.errorCode,
     });

@@ -38,6 +38,7 @@ export default function PublicSession() {
     null,
   );
   const [warning, setWarning] = useState<string | null>(null);
+  const [streamWarning, setStreamWarning] = useState<string | null>(null);
   const [messages, setMessages] = useState<PublicChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -190,6 +191,7 @@ export default function PublicSession() {
     setInputValue('');
     setIsStreaming(true);
     setStreamError(null);
+    setStreamWarning(null);
     setPublicSessionCache(sessionId, {
       sessionInfo: sessionInfo ?? undefined,
       messages: nextMessages,
@@ -206,9 +208,13 @@ export default function PublicSession() {
       identity: { scope: 'public-chat', conversationId: sessionId, requestId: crypto.randomUUID() },
       key: `public-chat:${sessionId}:${assistantId}`,
       onCheckpoint: (snapshot, terminal) => {
-        const updated = nextMessages.map<PublicChatMessage>(item => item.id === assistantId ? {
+        // 只有 warning 没有回答时（未配置提示词且无知识库），不保留空的助手消息；warning 只作为提示条显示
+        const withoutEmptyReply = nextMessages.filter(item => !(
+          item.id === assistantId && terminal && !snapshot.content && finalWarning
+        ));
+        const updated = withoutEmptyReply.map<PublicChatMessage>(item => item.id === assistantId ? {
           ...item, content: snapshot.content, metadata: snapshot.metadata,
-          warning: finalWarning ?? undefined, status: terminal ? (finalStatus === 'streaming' ? 'done' : finalStatus) : 'streaming',
+          status: terminal ? (finalStatus === 'streaming' ? 'done' : finalStatus) : 'streaming',
         } : item);
         // Persist the old conversation on cancellation, but never publish it into a new page.
         setPublicSessionCache(sessionId, {
@@ -228,7 +234,7 @@ export default function PublicSession() {
       );
       const finalState = await consumeKnowledgeChatStream(response, {
         signal: controller.signal,
-        onWarning: nextWarning => { finalWarning = nextWarning; if (isCurrent()) setWarning(nextWarning); },
+        onWarning: nextWarning => { finalWarning = nextWarning; if (isCurrent()) setStreamWarning(nextWarning); },
         onState: (state, replaced) => { if (isCurrent()) runtime.receive({ content: state.answer, metadata: { knowledgeAgent: state } }, replaced); },
       });
       if (!isCurrent()) return;
@@ -354,6 +360,12 @@ export default function PublicSession() {
         {warning && (
           <div className="public-session-page__warning" role="alert">
             <span>{warning}</span>
+          </div>
+        )}
+
+        {!warning && streamWarning && (
+          <div className="public-session-page__warning" role="status">
+            <span>{streamWarning}</span>
           </div>
         )}
 

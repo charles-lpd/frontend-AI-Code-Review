@@ -4,7 +4,6 @@ import { Label } from '@/ui/label';
 import { Input } from '@/ui/input';
 import { Button } from '@/ui/button';
 import { Textarea } from '@/ui/textarea';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ui/select';
 import {
   useCallback,
   useEffect,
@@ -31,10 +30,11 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import MessageItem from '../components/chat/MessageItem/MessageItem';
+import SessionMemories from '../components/session/SessionMemories';
 import { sessionApi } from '../api/sessions';
 import { buildPublicSessionUrl } from '../constants';
 import type { KnowledgePreviewResult } from '../api/index';
-import type { ChatMode, KnowledgeFileStatus } from '../types/chat';
+import type { KnowledgeFileStatus } from '../types/chat';
 import { useChatStore } from '../store/useChatStore';
 import './ChatDetail.css';
 
@@ -129,7 +129,6 @@ export default function ChatDetail() {
   const [titleDraft, setTitleDraft] = useState('');
   const [promptDraft, setPromptDraft] = useState('');
   const [isPublicDraft, setIsPublicDraft] = useState(false);
-  const [chatModeDraft, setChatModeDraft] = useState<ChatMode>('assistant');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [refreshingKnowledge, setRefreshingKnowledge] = useState(false);
@@ -182,13 +181,11 @@ export default function ChatDetail() {
     setTitleDraft(session?.title ?? '');
     setPromptDraft(session?.manageConfig?.systemPrompt ?? '');
     setIsPublicDraft(session?.manageConfig?.isPublic ?? false);
-    setChatModeDraft(session?.manageConfig?.chatMode ?? 'assistant');
   }, [
     session?.id,
     session?.title,
     session?.manageConfig?.systemPrompt,
     session?.manageConfig?.isPublic,
-    session?.manageConfig?.chatMode,
   ]);
 
   const refreshKnowledgeFiles = useCallback(
@@ -269,7 +266,6 @@ export default function ChatDetail() {
         title: titleDraft.trim() || '新对话',
         isPublic: isPublicDraft,
         systemPrompt: promptDraft,
-        chatMode: chatModeDraft,
       });
       messageApi.success('会话设置已保存');
     } catch (err: any) {
@@ -279,7 +275,6 @@ export default function ChatDetail() {
     }
   }, [
     isPublicDraft,
-    chatModeDraft,
     messageApi,
     promptDraft,
     sessionId,
@@ -334,7 +329,11 @@ export default function ChatDetail() {
         messageApi.success('文件已上传，正在等待索引');
         event.target.value = '';
       } catch (err: any) {
-        messageApi.error(err.message || '上传知识库文件失败');
+        messageApi.error(
+          err?.code === 'QUOTA_EXCEEDED'
+            ? '知识库容量已达上限（200MB），请删除部分文件后再上传'
+            : err.message || '上传知识库文件失败',
+        );
       } finally {
         setUploading(false);
       }
@@ -505,18 +504,6 @@ export default function ChatDetail() {
               {isPublicDraft ? '公开' : '私有'}
             </Button>
           </div>
-          <div className="chat-detail-page__field">
-            <Label htmlFor="session-mode">问答模式</Label>
-            <Select value={chatModeDraft} disabled={saving || uploading} onValueChange={(value) => setChatModeDraft(value as ChatMode)}>
-              <SelectTrigger id="session-mode" aria-label="问答模式"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">自动：有知识库文件时走知识库，否则走高级助手</SelectItem>
-                <SelectItem value="direct">普通问答：不检索知识库</SelectItem>
-                <SelectItem value="knowledge">知识库：固定检索当前会话文件</SelectItem>
-                <SelectItem value="assistant">高级助手：仅私有问答可使用</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           <div className="chat-detail-page__field chat-detail-page__field--full">
             <Label htmlFor={publicUrl ? 'session-public-url' : undefined}>公开链接</Label>
             {publicUrl ? (
@@ -653,9 +640,9 @@ export default function ChatDetail() {
                       {formatFileSize(file.size)} ·{' '}
                       {new Date(file.uploadedAt).toLocaleString()}
                     </div>
-                    {file.indexStatus === 'failed' && file.indexError && (
+                    {file.indexStatus === 'failed' && file.errorMessage && (
                       <div className="chat-detail-page__knowledge-error">
-                        {file.indexError}
+                        {file.errorMessage}
                       </div>
                     )}
                     {(file.indexStatus === 'pending' || file.indexStatus === 'processing') && (
@@ -713,6 +700,8 @@ export default function ChatDetail() {
             )}
           </div>
         </div>
+
+        <SessionMemories sessionId={sessionId} disabled={saving || uploading} />
 
         <div className="chat-detail-page__footer">
           <Button
