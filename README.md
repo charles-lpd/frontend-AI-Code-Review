@@ -1,230 +1,90 @@
-# AI 知识库 + 文生图 / 文生视频 前端
+# AI 知识库问答前端
 
-基于 **React 19 + TypeScript + Vite** 的前端项目，当前主要覆盖三块能力：
+基于 **React 19 + TypeScript + Vite** 的单页应用。核心场景是 GitHub 登录后、围绕单个会话的知识库问答：用户上传文档，智能体（ReAct Agent）结合知识库检索、联网搜索、天气查询、GitHub 只读工具生成回答，并支持把会话公开分享给无需登录的访客。
 
-1. AI 知识库聊天
-2. 文生图
-3. 文生视频
+## 技术栈
 
-项目整体以“会话 + 知识库 + 生成任务”作为核心信息架构，支持桌面端和移动端使用。
+- [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite 6](https://vitejs.dev/)
+- [Zustand 5](https://github.com/pmndrs/zustand) 管理会话与鉴权状态，持久化到 `localStorage`
+- [React Router 7](https://reactrouter.com/)
+- [Radix UI](https://www.radix-ui.com/) + [Tailwind CSS 4](https://tailwindcss.com/)：`src/ui` 下是一套 shadcn/ui（new-york 风格）基础组件
+- [Lucide React](https://lucide.dev/) 图标，[Sonner](https://sonner.emilkowal.ski/) 消息提示
+- [react-markdown](https://github.com/remarkjs/react-markdown) + `remark-gfm` + `react-syntax-highlighter`（Prism）用于回答的 Markdown 渲染与代码高亮
+- `axios` 处理普通请求，原生 `fetch` + `ReadableStream` 处理 SSE 流式问答
 
-## UI 与主题
+## 核心能力
 
-- 基础组件保存在 `src/ui`，采用 shadcn/ui 风格、Radix UI 和 Tailwind CSS 4；图标使用 Lucide，消息提示使用 Sonner。
-- `src/style.css` 是主题 Token 的唯一配置入口，采用 Neutral 黑白灰主色；成功、警告、错误和信息色只用于业务状态。
-- 类名合并使用 `@/lib/utils` 的 `cn()`；`@/*` 指向 `src/*`，`components.json` 配置为本地组件目录。
-- 页面布局 CSS 位于 `components` 样式层，本地组件的 Tailwind 工具类负责统一控件样式。全局样式必须在应用组件前加载，确保样式层级顺序稳定。
-- 聊天和审查共享 `src/components/workspace` 中的布局组件，仍使用原生消息滚动容器；移动端侧栏使用 Sheet，删除和清空操作使用异步确认弹窗。
-- 不再依赖 Ant Design；表单、请求、Store 和 SSE 协议沿用现有实现。
+- 多会话聊天，消息历史分页加载，草稿按会话独立保存
+- SSE 流式问答，实时展示 Agent 执行步骤（知识库检索、联网搜索、天气查询、GitHub 只读操作等工具调用）的进行中/完成/失败状态
+- 会话知识库：上传 PDF / DOCX / Markdown / TXT 文件，轮询索引状态，支持重建索引、一致性检查、文件内容预览
+- 会话设置：标题、系统提示词、公开 / 私有切换
+- 公开会话分享：无需登录即可访问的只读问答页面，公开会话不使用记忆，也不会调用 GitHub / 联网工具
+- 会话记忆（长期记忆）查看与删除
+- GitHub OAuth 登录（弹窗式），token 滑动续期
+- 个人中心：GitHub 用户信息、可访问仓库列表
 
-## 能力统计
+## 路由
 
-### 1. AI 知识库
-
-当前前端已支持以下知识库相关能力：
-
-- 多会话聊天
-- 会话详情页
-- 知识库文件上传
-- 文件索引状态展示：`pending / ready / failed`
-- 知识库文件列表刷新
-- 知识库重建索引
-- 一致性检查
-- 知识库文件内容预览
-- 公共会话访问与缓存
-- 清空会话记录
-
-### 2. 文生图
-
-当前前端已支持以下文生图能力：
-
-- 提示词输入
-- 运行任务创建
-- `GET /runs/:runId` 轮询
-- 产品化步骤展示
-- 图片产物展示
-- 运行记录列表
-- 通过 `runId` 直达详情页
-
-### 3. 文生视频
-
-当前前端已支持以下文生视频能力：
-
-- 提示词输入
-- 运行任务创建
-- `GET /runs/:runId` 轮询
-- 产品化步骤展示
-- 视频产物展示
-- 运行记录列表
-- 通过 `runId` 直达详情页
-
-## 页面入口
-
-### 主要路由
-
-- `/` - 会话首页
-- `/chat/:sessionId` - 对话页
-- `/chat-details/:sessionId` - 会话管理页
-- `/public/session/:id` - 公开会话页
-- `/profile` - 个人中心
-- `/image-generation` - 文生图页面
-- `/image-generation/:runId` - 文生图详情页
-- `/video-generation` - 文生视频页面
-- `/video-generation/:runId` - 文生视频详情页
-
-### 顶部导航
-
-当前导航提供：
-
-- 对话
-- 文生图
-- 文生视频
-
-登录后会显示 GitHub 用户信息与退出入口。
-
-## 主要功能说明
-
-### AI 知识库聊天
-
-会话系统支持多轮对话，并围绕单个会话维护知识库文件。
-
-当前能力包括：
-
-- 会话创建、删除、清空
-- 对话消息增量流式输出
-- 会话公开/私有切换
-- 会话系统提示词编辑
-- 知识库文件上传
-- 索引进度与异常状态展示
-- 索引完成后再进入可检索状态
-- 公开会话内容本地缓存
-
-知识库页面会根据文件状态定时刷新，避免“上传完成但索引还没结束”的误判。
-
-### 文生图
-
-文生图页面以三块内容为主：
-
-- 提示词模块
-- 产品化步骤模块
-- 图片产物模块
-
-当前交互逻辑：
-
-- 用户输入提示词后发起生成
-- 页面通过轮询 `GET /runs/:runId` 获取最新状态
-- 只有当任务 `status === 'succeeded'` 后，才会继续请求图片文件并展示
-- `runId` 页面支持直达历史任务
-- 当已带 `runId` 时，提示词只读，不允许重复提交
-
-### 文生视频
-
-文生视频页面与文生图保持同样的信息架构和交互习惯：
-
-- 提示词模块
-- 产品化步骤模块
-- 视频产物模块
-
-当前交互逻辑：
-
-- 用户输入提示词后发起生成
-- 页面通过轮询 `GET /runs/:runId` 获取最新状态
-- 只有当任务 `status === 'succeeded'` 后，才会继续请求视频文件并展示
-- `runId` 页面支持直达历史任务
-- 当已带 `runId` 时，提示词只读，不允许重复提交
-
-## 接口约定
-
-### 鉴权
-
-- 普通聊天、知识库、生成任务都依赖登录态
-- 文生图和文生视频接口都需要携带 `Authorization: Bearer <token>`
-
-### 基础地址
-
-项目会根据当前环境自动切换后端地址。
-
-- 开发环境：`http://localhost:3000/api`
-- 生产环境：`https://www.adongdong.xyz/api`
-
-相关常量在 [src/constants/index.ts](/Users/liupeidong/Desktop/myGithub/frontend-AI-Code-Review/src/constants/index.ts)
-
-### 知识库相关
-
-知识库相关接口主要由 `sessions` 模块提供，包含：
-
-- 会话列表
-- 会话详情
-- 会话清空
-- 会话管理配置更新
-- 知识库文件上传、删除、列表
-- 知识库重建
-- 一致性检查
-- 文件内容预览
-
-### 生成相关
-
-文生图和文生视频使用同一套生成 API 结构：
-
-- `POST /image/runs`
-- `GET /image/runs`
-- `GET /image/runs/:runId`
-- `GET /image/runs/:runId/artifacts`
-- `GET /image/artifacts/:artifactId/file`
-
-- `POST /video/runs`
-- `GET /video/runs`
-- `GET /video/runs/:runId`
-- `GET /video/runs/:runId/artifacts`
-- `GET /video/artifacts/:artifactId/file`
+| 路径 | 说明 |
+| --- | --- |
+| `/`、`/chat/:sessionId` | 会话首页 + 对话区，移动端侧边栏可收起 |
+| `/chat-details/:sessionId` | 会话设置与知识库管理 |
+| `/public/session/:id` | 公开分享会话（匿名访问） |
+| `/profile` | 个人中心 |
 
 ## 项目结构
 
 ```text
 src/
-  api/          API 请求封装
-  components/   可复用 UI 组件
-  constants/    固定配置与路径常量
-  hooks/        业务 Hook
-  pages/        页面组件
-  services/     流式处理和业务服务
-  store/        Zustand 状态管理
-  types/        TypeScript 类型定义
+  api/          HTTP 封装：axios 实例、SSE 请求发起、sessions / github / memories 接口
+  components/   业务组件：chat（面板、消息、会话导航）、markdown（渲染与代码高亮）、
+                workspace（聊天与设置页共享的布局组件）、session（记忆面板）、
+                登录弹窗、GitHub 接入引导
+  hooks/        业务 Hook：鉴权、路由与会话同步、发送消息、滚动跟随、侧边栏状态、流式草稿订阅
+  lib/          工具函数：className 合并、登录弹窗跨窗口通信
+  pages/        页面：Home、ChatDetail、Profile、PublicSession
+  services/     流式核心：SSE 帧解析（streamTransport）、Agent 事件归并（knowledgeAgentStream）、
+                逐字渐显渲染（textStreamRuntime）、发送消息服务（sendChatMessage）
+  store/        Zustand：会话状态（useChatStore，持久化）、鉴权状态（useAuthStore，持久化）、
+                登录弹窗状态（useLoginDialogStore）
+  types/        TypeScript 类型定义（chat.ts）
+  ui/           shadcn/ui 风格基础组件（基于 Radix UI + Tailwind）
 ```
 
-## 技术栈
+## 聊天流式协议（简述）
 
-- [React 19](https://react.dev/)
-- [TypeScript](https://www.typescriptlang.org/)
-- [Vite](https://vitejs.dev/)
-- [Zustand](https://github.com/pmndrs/zustand)
-- [React Router](https://reactrouter.com/)
-- [Ant Design](https://ant.design/)
-- [Lucide React](https://lucide.dev/)
-- [React Markdown](https://github.com/remarkjs/react-markdown)
+- 发送消息：私有会话 `POST /api/chat`，公开会话 `POST /api/public/chat`；响应 `Content-Type` 为 `text/event-stream`。
+- 事件类型：`message_meta`（流开始）、`text`（文本增量）、`citation`（知识库引用）、`agent_status`（`agent_started` / `tool_started` / `tool_finished` / `memory_saved` / `memory_rejected` / `agent_finished` / `error`），以 `data: [DONE]` 结束。
+- 同一个工具调用的开始 / 结束事件按 `callId`（没有时用 `stepKey`）配对，前端归并成步骤列表，实时展示“正在……”到“已完成 / 失败”的状态变化；记忆事件（`memory_saved` / `memory_rejected`）不是工具步骤，单独展示。
+- 完整的事件字段、错误码和边界情况以后端提供的对接文档为准，不在前端仓库内维护。
 
-## 本地启动
+## 鉴权
+
+- GitHub OAuth 走整页跳转登录，回调页 `/login-callback` 接收 token 后通知主窗口并关闭弹窗。
+- 需要鉴权的请求统一携带 `Authorization: Bearer <token>`；响应头出现 `X-Refreshed-Token` 时自动替换本地 token（滑动续期，默认 14 天，绝对有效期 30 天）。
+- 返回 401 且不是 GitHub 授权失效时，清除本地登录态并跳转首页；GitHub 授权单独失效（`GITHUB_AUTH_EXPIRED` / `GITHUB_AUTH_FAILED`）不影响站内登录态，由调用方提示重新授权。
+
+## 基础地址
+
+开发环境默认 `http://localhost:3000/api`，生产环境默认 `https://www.adongdong.xyz/api`；可通过环境变量 `VITE_API_BASE_URL` 覆盖，见 [src/constants/index.ts](src/constants/index.ts)。
+
+## 本地开发
 
 ```bash
 yarn install
-yarn dev
-```
-
-然后打开：
-
-```text
-http://localhost:5173
+yarn dev        # http://localhost:5173
 ```
 
 ## 构建
 
 ```bash
-yarn build
+yarn build      # tsc -b && vite build
 yarn preview
 ```
 
-## 备注
+## 测试
 
-- 文生图与文生视频页面已经做了统一的产品化步骤展示和产物展示。
-- 知识库文件会根据索引状态异步刷新，不会把“上传成功”等同于“可检索成功”。
-- `Profile` 页面会聚合仓库、图片生成记录和视频生成记录，方便回看历史任务。
+```bash
+yarn test:chat    # tests/chat-consistency.test.mjs，验证发送/重试逻辑
+yarn test:stream  # tests/stream-runtime.test.mjs，验证流式渐显与 checkpoint 逻辑
+```
