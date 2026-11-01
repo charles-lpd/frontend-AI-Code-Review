@@ -193,7 +193,10 @@
 
 .knowledge-agent__body-inner {
   min-height: 0;
-  overflow: hidden;
+  /* 步骤/搜索结果较多时在面板内部滚动，避免撑开整条消息的高度 */
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 0.7rem;
 }
 
@@ -266,11 +269,6 @@
 
 .knowledge-agent__search-items li {
   margin-bottom: 0.3rem;
-}
-
-.knowledge-agent__search-items p {
-  margin: 0.1rem 0 0;
-  opacity: 0.75;
 }
 
 .knowledge-agent__memory {

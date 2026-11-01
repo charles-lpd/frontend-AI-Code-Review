@@ -165,7 +165,6 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                         ) : (
                           <span>{item.title}</span>
                         )}
-                        {item.snippet && <p>{item.snippet}</p>}
                       </li>
                     );
                   })}

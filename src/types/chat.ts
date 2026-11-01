@@ -110,10 +110,10 @@ export interface KnowledgeAgentStep {
   url?: string;
 }
 
+/** search_web 工具结果：后端只提供标题和链接，不含摘要/评分（详细内容只给模型，不发给前端） */
 export interface SearchResultItem {
   title: string;
   url: string;
-  snippet: string;
 }
 
 /** 记忆通知（memory_saved / memory_rejected），不属于工具步骤，按 seq 排列 */
