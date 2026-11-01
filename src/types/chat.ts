@@ -1,17 +1,21 @@
 /** 消息发送方 */
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
-export type ChatMode = 'auto' | 'direct' | 'knowledge' | 'assistant';
 export type KnowledgeFileStatus = 'pending' | 'processing' | 'ready' | 'failed';
 export type KnowledgeReadiness = 'empty' | 'indexing' | 'ready' | 'mixed' | 'failed';
 export type ApiErrorCode =
-  | 'INVALID_REQUEST' | 'SESSION_NOT_FOUND' | 'SESSION_ACCESS_DENIED'
+  | 'INVALID_REQUEST' | 'REQUEST_FAILED' | 'CONTEXT_TOO_LARGE'
+  | 'SESSION_NOT_FOUND' | 'SESSION_ACCESS_DENIED' | 'FILE_NOT_FOUND' | 'USER_NOT_FOUND' | 'NOT_FOUND'
   | 'PUBLIC_SESSION_NOT_FOUND' | 'KNOWLEDGE_NOT_READY' | 'KNOWLEDGE_INDEX_FAILED'
-  | 'EMBEDDING_UNAVAILABLE' | 'EMBEDDING_DIMENSION_MISMATCH' | 'LLM_UNAVAILABLE'
-  | 'LLM_TIMEOUT' | 'TOOL_FAILED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'
-  | 'CHAT_IN_PROGRESS' | 'IDEMPOTENCY_CONFLICT' | 'CHAT_RETRY_CONFLICT'
-  | 'LLM_STREAM_INCOMPLETE' | 'GITHUB_UNAVAILABLE' | 'OAUTH_STATE_INVALID' | 'CHAT_TIMEOUT'
+  | 'FILE_TOO_LARGE' | 'UNSUPPORTED_FILE' | 'QUOTA_EXCEEDED'
+  | 'EMBEDDING_UNAVAILABLE' | 'EMBEDDING_INVALID_RESPONSE' | 'EMBEDDING_DIMENSION_MISMATCH'
+  | 'LLM_UNAVAILABLE' | 'LLM_STREAM_INCOMPLETE' | 'LLM_CONTENT_FILTERED' | 'LLM_TIMEOUT'
+  | 'TOOL_FAILED' | 'RATE_LIMITED' | 'RATE_LIMITER_UNAVAILABLE' | 'SERVER_BUSY'
+  | 'INTERNAL_ERROR' | 'CLIENT_DISCONNECTED'
+  | 'CHAT_IN_PROGRESS' | 'IDEMPOTENCY_CONFLICT' | 'CHAT_RETRY_CONFLICT' | 'CHAT_TIMEOUT'
+  | 'GITHUB_UNAVAILABLE' | 'GITHUB_CONFIG_INVALID' | 'OAUTH_STATE_INVALID'
   | 'GITHUB_AUTH_EXPIRED' | 'GITHUB_AUTH_FAILED'
-  | 'GITHUB_REPO_NOT_ACCESSIBLE' | 'GITHUB_FORBIDDEN' | 'GITHUB_NOT_FOUND' | 'GITHUB_RATE_LIMITED';
+  | 'GITHUB_REPO_NOT_ACCESSIBLE' | 'GITHUB_FORBIDDEN' | 'GITHUB_NOT_FOUND' | 'GITHUB_RATE_LIMITED'
+  | 'MEMORY_TOO_LONG' | 'MEMORY_LIMIT_REACHED' | 'MEMORY_NOT_FOUND';
 
 export interface Citation {
   citationId: string;
@@ -35,15 +39,12 @@ export interface SessionKnowledgeFile {
   uploadedAt: number;
   indexStatus: KnowledgeFileStatus;
   errorMessage: string | null;
-  /** @deprecated backend used this name in older responses */
-  indexError?: string | null;
 }
 
 export interface SessionManageConfig {
   title?: string;
   isPublic: boolean;
   systemPrompt: string;
-  chatMode: ChatMode;
   knowledgeReadiness: KnowledgeReadiness;
   knowledgeFiles: SessionKnowledgeFile[];
 }
@@ -52,7 +53,6 @@ export interface PublicSessionInfo {
   id: string;
   title: string;
   isPublic: boolean;
-  chatMode: ChatMode;
   createdAt: number;
   warning: string | null;
   manageConfig: SessionManageConfig;
@@ -104,14 +104,29 @@ export interface KnowledgeAgentStep {
   message?: string;
   /** 步骤失败时的错误码（工具调用失败，例如 GitHub 仓库无权限、限流等） */
   code?: ApiErrorCode;
+  /** search_web 完成后的搜索结果摘要（tool_finished 携带） */
+  items?: SearchResultItem[];
+  /** GitHub 工具的实际链接（后端给出，前端不自行拼接分支） */
+  url?: string;
 }
+
+export interface SearchResultItem {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/** 记忆通知（memory_saved / memory_rejected），不属于工具步骤，按 seq 排列 */
+export type MemoryNotice =
+  | { key: number; kind: 'saved'; memoryId: string; text: string }
+  | { key: number; kind: 'rejected'; code?: ApiErrorCode; message?: string };
 
 export interface KnowledgeAgentStreamState {
   answer: string;
   steps: Record<string, KnowledgeAgentStep>;
+  memories: MemoryNotice[];
   status: 'idle' | 'connecting' | 'retrieving' | 'generating' | 'completed' | 'truncated' | 'failed' | 'aborted';
   finishReason?: string | null;
-  executionMode?: ChatMode;
   requestId?: string;
   citations: Citation[];
   errorCode?: ApiErrorCode;
@@ -160,7 +175,6 @@ export interface ChatMessage {
 export interface ChatSession {
   id: string;
   title: string;
-  chatMode?: ChatMode;
   userId?: string;
   isPublic?: boolean;
   systemPrompt?: string | null;
@@ -168,8 +182,6 @@ export interface ChatSession {
   messages: ChatMessage[];
   draft: string;
   updatedAt: number;
-  /** 会话摘要，用于展示长对话背景 */
-  summary?: string | null;
   /** 是否已加载详情（至少加载了第一页） */
   detailsLoaded?: boolean;
   /** 是否还有更多历史记录 */

@@ -226,7 +226,6 @@ export const updateSessionManage = async (
     title?: string;
     isPublic?: boolean;
     systemPrompt?: string;
-    chatMode?: import('../types/chat').ChatMode;
   },
 ): Promise<any> => {
   const result = await sendRequest({
@@ -366,12 +365,15 @@ export const checkSessionKnowledgeConsistency = async (
   return result.data;
 };
 
+/** 公开会话详情是匿名接口：不携带 Authorization，返回的始终是访客视图。 */
 export const getPublicSessionDetail = async (
   sessionId: string,
 ): Promise<any> => {
-  const result = await sendRequest({
-    method: 'GET',
-    url: `${baseUrl}/public/sessions/${sessionId}`,
+  const response = await fetch(`${baseUrl}/public/sessions/${sessionId}`, {
+    headers: { Accept: 'application/json' },
   });
-  return result.data;
+  if (!response.ok) {
+    await throwResponseError(response);
+  }
+  return response.json();
 };

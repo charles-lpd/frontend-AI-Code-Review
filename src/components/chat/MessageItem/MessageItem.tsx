@@ -22,7 +22,26 @@ const STEP_FAIL_CODE_TEXT: Partial<Record<ApiErrorCode, string>> = {
   GITHUB_NOT_FOUND: '仓库或文件不存在',
   GITHUB_RATE_LIMITED: 'GitHub 接口限流',
   GITHUB_UNAVAILABLE: 'GitHub 连接超时',
+  EMBEDDING_UNAVAILABLE: '知识库服务暂不可用',
+  EMBEDDING_INVALID_RESPONSE: '知识库服务返回异常',
+  EMBEDDING_DIMENSION_MISMATCH: '向量配置不一致',
 };
+
+/** 记忆保存被拒绝时的提示（memory_rejected） */
+const MEMORY_REJECT_TEXT: Partial<Record<string, string>> = {
+  MEMORY_TOO_LONG: '记忆超过 500 字，未能保存，请精简后再说',
+  MEMORY_LIMIT_REACHED: '本会话的记忆已达 100 条，未能保存，请到记忆列表删除部分记忆',
+};
+
+/** 只允许 http(s) 链接；校验通过后原样返回，不做二次编码或规范化 */
+function safeHttpUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+}
 
 interface MessageItemProps {
   role: ChatRole;
@@ -32,23 +51,9 @@ interface MessageItemProps {
   streaming?: boolean;
 }
 
-/** 文档 4.5：这些工具的 detail 形如 repo:path，可拼成 GitHub 链接 */
-const GITHUB_PATH_TOOL_KEYS = new Set([
-  'tool:github_list_files',
-  'tool:github_read_file',
-  'tool:github_search_code',
-  'tool:github_get_commits',
-]);
-
-/** 把 repo:path 形式的 detail 转成 GitHub 链接；无法可靠解析时返回 null（detail 可能被截断成 "…"） */
-function githubDetailUrl(stepKey: string, detail?: string): string | null {
-  if (!detail || !GITHUB_PATH_TOOL_KEYS.has(stepKey) || detail.endsWith('…')) return null;
-  const separator = detail.indexOf(':');
-  if (separator <= 0 || separator === detail.length - 1) return null;
-  const repo = detail.slice(0, separator);
-  const path = detail.slice(separator + 1);
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return null;
-  return `https://github.com/${repo}/blob/main/${path.split('/').map(encodeURIComponent).join('/')}`;
+/** 工具步骤的链接只使用后端给出的 url（后端按实际 ref 生成），前端不假设分支 */
+function githubDetailUrl(url?: string): string | null {
+  return url ? safeHttpUrl(url) : null;
 }
 
 /** 工具步骤的进度展示 */
@@ -57,7 +62,7 @@ const KnowledgeAgentStepLabel = memo(function KnowledgeAgentStepLabel({
 }: {
   step: KnowledgeAgentStep;
 }) {
-  const url = githubDetailUrl(step.stepKey, step.detail);
+  const url = githubDetailUrl(step.url);
   if (step.stepStatus === 'running') {
     return (
       <span className="knowledge-agent__step-label">
@@ -95,8 +100,9 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
       ),
     [agent?.steps],
   );
+  const memories = agent?.memories ?? [];
 
-  if (!agent || steps.length === 0) return null;
+  if (!agent || (steps.length === 0 && memories.length === 0)) return null;
 
   const statusLabel =
     agent.status === 'failed'
@@ -106,9 +112,7 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
       : agent.status === 'completed'
         ? '处理完成'
         : '正在处理';
-  const modeLabel = agent.executionMode
-    ? { auto: '自动', direct: '普通问答', knowledge: '知识库', assistant: '高级助手' }[agent.executionMode]
-    : 'Agent';
+  const modeLabel = 'Agent';
 
   return (
     <div className={`knowledge-agent knowledge-agent--${agent.status}`}>
@@ -150,6 +154,23 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                 )}
               </span>
               <KnowledgeAgentStepLabel step={step} />
+              {step.items && step.items.length > 0 && (
+                <ul className="knowledge-agent__search-items">
+                  {step.items.map((item) => {
+                    const href = safeHttpUrl(item.url);
+                    return (
+                      <li key={`${item.url}-${item.title}`}>
+                        {href ? (
+                          <a href={href} target="_blank" rel="noopener noreferrer">{item.title}</a>
+                        ) : (
+                          <span>{item.title}</span>
+                        )}
+                        {item.snippet && <p>{item.snippet}</p>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
               {step.stepStatus === 'completed' &&
                 typeof step.durationMs === 'number' && (
                 <span className="knowledge-agent__duration">
@@ -163,6 +184,16 @@ const KnowledgeAgentView = memo(function KnowledgeAgentView({
                   {step.message || (step.code ? STEP_FAIL_CODE_TEXT[step.code] : undefined)}
                 </span>
               )}
+            </div>
+          ))}
+          {memories.map((notice) => (
+            <div
+              className={`knowledge-agent__memory knowledge-agent__memory--${notice.kind}`}
+              key={notice.key}
+            >
+              {notice.kind === 'saved'
+                ? `已记住：${notice.text}`
+                : MEMORY_REJECT_TEXT[notice.code ?? ''] || notice.message || '记忆未能保存'}
             </div>
           ))}
           {agent.error && (

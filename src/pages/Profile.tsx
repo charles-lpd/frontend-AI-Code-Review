@@ -3,7 +3,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/ui/avatar';
 import { Card } from '@/ui/card';
 import { Badge } from '@/ui/badge';
 import { Button } from '@/ui/button';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { githubApi, type GithubRepo } from '../api/github';
@@ -37,27 +37,35 @@ export default function Profile() {
   const [errorCode, setErrorCode] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      void fetchRepos();
-      if (!hasFetched) {
-        void fetchSessions();
-      }
-    }
+    if (isAuthenticated) void fetchRepos();
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated && !hasFetched) void fetchSessions();
   }, [isAuthenticated, hasFetched, fetchSessions]);
 
-  const fetchRepos = async () => {
+  // 进行中的仓库请求：StrictMode 下 effect 会执行两次，这里保证同一时间只发一次
+  const reposRequestRef = useRef<Promise<void> | null>(null);
+
+  const fetchRepos = () => {
+    if (reposRequestRef.current) return reposRequestRef.current;
     setLoading(true);
     setError(null);
     setErrorCode(null);
-    try {
-      const data = await githubApi.getUserRepos();
-      setRepos(data);
-    } catch (err: any) {
-      setError(err.message || '获取仓库列表失败');
-      setErrorCode(err.code ?? null);
-    } finally {
-      setLoading(false);
-    }
+    const request = (async () => {
+      try {
+        const data = await githubApi.getUserRepos();
+        setRepos(data);
+      } catch (err: any) {
+        setError(err.message || '获取仓库列表失败');
+        setErrorCode(err.code ?? null);
+      } finally {
+        setLoading(false);
+        reposRequestRef.current = null;
+      }
+    })();
+    reposRequestRef.current = request;
+    return request;
   };
 
   const needsGithubReauth = errorCode === 'GITHUB_AUTH_EXPIRED' || errorCode === 'GITHUB_AUTH_FAILED';
@@ -145,11 +153,6 @@ export default function Profile() {
                       <span className="profile__session-time">
                         创建于 {new Date(session.updatedAt).toLocaleString()}
                       </span>
-                      {session.summary && (
-                        <span className="profile__session-time">
-                          {session.summary}
-                        </span>
-                      )}
                     </div>
                   </Link>
                 );
